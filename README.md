@@ -3,8 +3,9 @@
 A GTK4/libadwaita camera application for GNOME and Halium-based Linux phones.
 
 The app is deliberately small at this stage: it proves the FuriCam Camera2
-engine can drive a native GTK4 preview and full-resolution still capture inside
-a Flatpak, and it leaves room for a V4L2/libcamera backend later.
+engine can drive a native GTK4 preview, full-resolution still capture and
+1080p H.264 recording inside a Flatpak, and it leaves room for a V4L2/libcamera
+backend later.
 
 ## Status
 
