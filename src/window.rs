@@ -222,6 +222,9 @@ mod imp {
             view.connect_notify_local(Some("ready"), move |view, _| {
                 label.set_visible(!view.ready());
                 if let Some(window) = weak.upgrade() {
+                    if view.ready() {
+                        window.update_camera_menu();
+                    }
                     window.update_mode_ui();
                 }
             });
