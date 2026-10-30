@@ -4,12 +4,12 @@
 //
 // Minimal safe wrapper around FuriCam's backend-neutral `fc2_*` C API.
 
-use std::ffi::{c_char, c_int, c_void, CString};
+use std::ffi::{c_char, c_int, c_void, CStr, CString};
 use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 use std::ptr;
 
-use super::{CameraBackend, CameraError, CameraInfo, Facing};
+use super::{CameraBackend, CameraError, CameraInfo, Facing, PhotoSink};
 
 #[repr(C)]
 struct fc2_camera {
@@ -53,16 +53,48 @@ extern "C" {
         user_data: *mut c_void,
     );
     fn fc2_capture_photo(camera: *mut fc2_camera, path: *const c_char) -> c_int;
+    fn fc2_set_photo_callback(
+        camera: *mut fc2_camera,
+        callback: Option<extern "C" fn(*mut c_void, *const c_char, c_int)>,
+        user_data: *mut c_void,
+    );
+}
+
+/// Stable allocation whose address is handed to the C API.  The `Arc` keeps
+/// the callback slot alive even while `CameraSession` recreates backends.
+struct PhotoSinkFfi {
+    sink: PhotoSink,
+}
+
+extern "C" fn photo_callback_trampoline(user_data: *mut c_void, path: *const c_char, ok: c_int) {
+    if user_data.is_null() || path.is_null() {
+        return;
+    }
+
+    // The pointer is `&PhotoSinkFfi` owned by the live `Camera2Backend`; C only
+    // invokes it while the backend is open.
+    let sink = unsafe { &*(user_data as *const PhotoSinkFfi) };
+    let path = unsafe { CStr::from_ptr(path) }
+        .to_string_lossy()
+        .into_owned();
+    let callback = sink
+        .sink
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    if let Some(callback) = callback.as_ref() {
+        callback(&path, ok != 0);
+    }
 }
 
 pub struct Camera2Backend {
     raw: *mut fc2_camera,
     device_rotation: i32,
     mirror: bool,
+    photo_sink: Box<PhotoSinkFfi>,
 }
 
 impl Camera2Backend {
-    pub fn new() -> Result<Self, CameraError> {
+    pub fn new(photo_sink: PhotoSink) -> Result<Self, CameraError> {
         // On a non-Halium build the engine is compiled with its host stub and
         // this returns 0.  If libhybris is simply missing at runtime the
         // subsequent open() fails with OpenFailed instead.
@@ -74,7 +106,24 @@ impl Camera2Backend {
             raw: ptr::null_mut(),
             device_rotation: 0,
             mirror: false,
+            photo_sink: Box::new(PhotoSinkFfi { sink: photo_sink }),
         })
+    }
+
+    fn photo_sink_ptr(&self) -> *mut c_void {
+        &*self.photo_sink as *const PhotoSinkFfi as *mut c_void
+    }
+
+    fn register_callbacks(&self, raw: *mut fc2_camera) {
+        if raw.is_null() {
+            return;
+        }
+        unsafe {
+            fc2_set_frame_callback(raw, Some(noop_frame_callback), ptr::null_mut());
+            fc2_set_device_rotation(raw, self.device_rotation);
+            fc2_set_preview_mirror(raw, self.mirror as c_int);
+            fc2_set_photo_callback(raw, Some(photo_callback_trampoline), self.photo_sink_ptr());
+        }
     }
 
     fn read_cameras(&self) -> Vec<CameraInfo> {
@@ -89,9 +138,8 @@ impl Camera2Backend {
             sensor_orientation: 0,
         });
 
-        let count = unsafe {
-            fc2_list_open_cameras(self.raw, infos.as_mut_ptr(), MAX_CAMERAS as c_int)
-        };
+        let count =
+            unsafe { fc2_list_open_cameras(self.raw, infos.as_mut_ptr(), MAX_CAMERAS as c_int) };
         infos[..count.max(0) as usize]
             .iter()
             .map(camera_info_from)
@@ -135,11 +183,7 @@ impl CameraBackend for Camera2Backend {
         }
 
         self.raw = raw;
-        unsafe {
-            fc2_set_frame_callback(raw, Some(noop_frame_callback), ptr::null_mut());
-            fc2_set_device_rotation(raw, self.device_rotation);
-            fc2_set_preview_mirror(raw, self.mirror as c_int);
-        }
+        self.register_callbacks(raw);
 
         let cameras = self.read_cameras();
         if cameras.is_empty() {
@@ -158,19 +202,17 @@ impl CameraBackend for Camera2Backend {
             return Err(CameraError::OpenFailed);
         }
 
-        unsafe {
-            fc2_set_frame_callback(raw, Some(noop_frame_callback), ptr::null_mut());
-            fc2_set_device_rotation(raw, self.device_rotation);
-            fc2_set_preview_mirror(raw, self.mirror as c_int);
-        }
-
         self.raw = raw;
+        self.register_callbacks(raw);
         Ok(())
     }
 
     fn close(&mut self) {
         if !self.raw.is_null() {
-            unsafe { fc2_close(self.raw) };
+            unsafe {
+                fc2_set_photo_callback(self.raw, None, ptr::null_mut());
+                fc2_close(self.raw);
+            }
             self.raw = ptr::null_mut();
         }
     }

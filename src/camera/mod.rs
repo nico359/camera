@@ -11,6 +11,7 @@ mod camera2;
 
 use std::fmt;
 use std::path::Path;
+use std::sync::{Arc, Mutex};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Facing {
@@ -27,6 +28,16 @@ pub struct CameraInfo {
     /// Human-readable label assigned by `CameraSession` ("Back Camera 2", …).
     pub label: String,
 }
+
+/// Called after a still has been written (or failed to write).  The callback
+/// runs on the camera/writer thread, so the UI layer must marshal it to the
+/// main context before touching widgets.
+pub type PhotoCallback = Box<dyn Fn(&str, bool) + Send + Sync + 'static>;
+
+/// Shared slot between `CameraSession` and the C trampoline.  It is kept
+/// separate from the backend so changing the callback never requires reopening
+/// the camera.
+pub(crate) type PhotoSink = Arc<Mutex<Option<PhotoCallback>>>;
 
 #[derive(Debug)]
 pub enum CameraError {
@@ -68,14 +79,15 @@ pub trait CameraBackend {
     fn set_preview_mirror(&mut self, mirror: bool);
 }
 
-fn create_backend() -> Result<Box<dyn CameraBackend>, CameraError> {
+fn create_backend(photo_sink: PhotoSink) -> Result<Box<dyn CameraBackend>, CameraError> {
     #[cfg(feature = "camera2")]
     {
-        Ok(Box::new(camera2::Camera2Backend::new()?))
+        Ok(Box::new(camera2::Camera2Backend::new(photo_sink)?))
     }
 
     #[cfg(not(feature = "camera2"))]
     {
+        let _ = photo_sink;
         Err(CameraError::Unavailable)
     }
 }
@@ -113,6 +125,7 @@ pub struct CameraSession {
     cameras: Vec<CameraInfo>,
     current: usize,
     device_rotation: i32,
+    photo_sink: PhotoSink,
 }
 
 impl CameraSession {
@@ -131,11 +144,21 @@ impl CameraSession {
         }
     }
 
+    /// Install (or clear) the still-capture result callback.  Safe to call
+    /// before or after opening; the sink is shared with any backend created
+    /// later.
+    pub fn set_photo_callback(&self, callback: Option<PhotoCallback>) {
+        *self
+            .photo_sink
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = callback;
+    }
+
     /// Open the first back camera (or the first camera if there is no back one).
     pub fn open_first(&mut self) -> Result<(), CameraError> {
         self.close();
 
-        let mut backend = create_backend()?;
+        let mut backend = create_backend(Arc::clone(&self.photo_sink))?;
         let mut cameras = backend.open_first()?;
         label_cameras(&mut cameras);
 

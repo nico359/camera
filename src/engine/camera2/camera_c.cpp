@@ -8,6 +8,7 @@
 #include "CameraSession.h"
 #include "PreviewRenderer.h"
 
+#include <atomic>
 #include <cstdio>
 #include <new>
 #include <string>
@@ -16,6 +17,12 @@ using furicam::CameraSession;
 using furicam::PreviewRenderer;
 
 struct fc2_camera {
+    // Declared before `session`: members are destroyed in reverse order, and
+    // the session's writer thread must be joined before these atomics go away
+    // (a queued writer job may still read them while draining).
+    std::atomic<fc2_photo_callback> photoCb{nullptr};
+    std::atomic<void*>              photoUser{nullptr};
+
     CameraSession   session;
     PreviewRenderer renderer;
     std::string     openId;
@@ -110,6 +117,10 @@ void fc2_close(fc2_camera* c)
 {
     if (!c)
         return;
+    // Detach the Rust-side sink before the writer thread is joined.  The
+    // callback may already have been copied out of the session's mutex, so it
+    // also checks for a null callback before dereferencing `c`.
+    fc2_set_photo_callback(c, nullptr, nullptr);
     c->session.close();
     delete c;
 }
@@ -190,6 +201,26 @@ void fc2_set_focus_point(fc2_camera* c, float x, float y) { if (c) c->session.se
 int fc2_capture_photo(fc2_camera* c, const char* path)
 {
     return (c && path && c->session.capturePhoto(path)) ? 1 : 0;
+}
+
+void fc2_set_photo_callback(fc2_camera* c, fc2_photo_callback cb, void* user)
+{
+    if (!c)
+        return;
+    if (cb) {
+        c->photoUser.store(user);
+        c->photoCb.store(cb);
+        c->session.setPhotoCallback([c](const std::string& path, bool ok) {
+            auto callback = c->photoCb.load();
+            if (!callback)
+                return;
+            callback(c->photoUser.load(), path.c_str(), ok ? 1 : 0);
+        });
+    } else {
+        c->photoCb.store(nullptr);
+        c->photoUser.store(nullptr);
+        c->session.setPhotoCallback({});
+    }
 }
 
 int fc2_start_recording(fc2_camera* c, const char* path, int width, int height, int fps, int bitrate)

@@ -82,6 +82,11 @@ void  fc2_set_focus_point(fc2_camera* c, float x, float y); /* normalized [0,1] 
 
 /* Capture / record.  Capture and recording finish asynchronously. */
 int  fc2_capture_photo(fc2_camera* c, const char* path);
+
+/* Result of a still capture.  Called on a camera thread after the JPEG has
+ * been written (or after the write failed).  `ok` is 1 on success. */
+typedef void (*fc2_photo_callback)(void* user, const char* path, int ok);
+void fc2_set_photo_callback(fc2_camera* c, fc2_photo_callback cb, void* user);
 int  fc2_start_recording(fc2_camera* c, const char* path, int width, int height, int fps, int bitrate);
 void fc2_stop_recording(fc2_camera* c);
 
