@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+//
+// Copyright 2026 nico359
+
 //! Build script for the optional FuriCam Camera2 backend.
 //!
 //! The engine is vendored under `src/engine/camera2` and is compiled

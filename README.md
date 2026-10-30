@@ -91,12 +91,12 @@ meson setup build -Dcamera2=true
 
 ## Licensing
 
-The application is GPL-3.0-or-later.  The vendored FuriCam Camera2 engine is
-GPL-2.0-only; see `src/engine/camera2/README.md`.  Those two licenses are not
-compatible without the copyright holders' permission, so this vendored copy is
-for local development until the licensing question is resolved.
+The application is **GPL-2.0-or-later**.  The vendored FuriCam Camera2 engine
+is **GPL-2.0-only**; see `src/engine/camera2/README.md`.  A binary that links
+the engine is distributed under **GPL-2.0**.  The app code alone may also be
+used under GPL-3.0-or-later, but distributing the combined work under GPL-3.0
+would require permission from the engine copyright holders.
 
-The simplest compatible fix is to relicense the application itself to
-GPL-2.0-or-later, which the app copyright holder can do, or to obtain
-permission from the Camera2 engine contributors to use GPL-2.0-or-later there.
+FuriCam itself is based on FuriOS-camera (`GPL-2.0-only`, Furi Labs/Droidian
+Project) and remains GPL-2.0-only unless its copyright holders agree otherwise.
 This is not legal advice.

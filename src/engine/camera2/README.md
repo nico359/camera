@@ -16,15 +16,15 @@ Upstream: <https://github.com/nico359/furicam>, `src/camera2/`.
 ## Licensing
 
 The engine files carry `SPDX-License-Identifier: GPL-2.0-only` and are
-copyright Sean Pollard and contributors.  This application is currently
-`GPL-3.0-or-later`.  **GPL-2.0-only and GPL-3.0-or-later are not compatible
-without the copyright holders' permission.**  This vendored copy is for local
-experimentation while the app is being validated; before distributing a build
-that links it, either obtain permission to relicense the engine or move the
-combined work to a GPL-2.0-compatible license.
+copyright Sean Pollard and contributors.  The application is
+`GPL-2.0-or-later`.  The combined work is distributed under **GPL-2.0**: the
+application code can also be used under GPL-3.0-or-later on its own, but a
+binary that links this GPL-2.0-only engine cannot be distributed under GPL-3.0
+without permission from the engine copyright holders.
 
 ## Keeping it in sync
 
-The copy is intentionally unmodified apart from this README and the added
-`hybris_loader.cpp`.  When the engine changes upstream, re-copy the files and
-re-check the build flags in `build.rs`.
+The copy has local modifications for the GTK frontend: `camera_c.{h,cpp}`
+expose asynchronous still-capture results, and `hybris_loader.cpp` is added.
+When the engine changes upstream, re-copy the files, re-apply those changes,
+and re-check the build flags in `build.rs`.
