@@ -102,7 +102,11 @@ impl CameraApplication {
             .application_icon("io.github.nico359.camera")
             .developer_name("nico359")
             .version(VERSION)
-            .developers(vec!["nico359"])
+            .comments(&gettext(
+                "A camera app powered by FuriCam's Camera2 engine",
+            ))
+            .website("https://github.com/nico359/camera")
+            .developers(vec!["nico359", "Sean Pollard"])
             // Translators: Replace "translator-credits" with your name/username, and optionally an email or URL.
             .translator_credits(&gettext("translator-credits"))
             .copyright("© 2026 nico359")

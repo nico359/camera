@@ -19,7 +19,10 @@
  */
 
 mod application;
+mod camera;
 mod config;
+mod photo;
+mod ui;
 mod window;
 
 use self::application::CameraApplication;
@@ -41,6 +44,10 @@ fn main() -> glib::ExitCode {
     let resources = gio::Resource::load(PKGDATADIR.to_owned() + "/camera.gresource")
         .expect("Could not load resources");
     gio::resources_register(&resources);
+
+    // Register widget types that GtkBuilder templates reference before the
+    // first window is created.
+    ui::init();
 
     // Create a new GtkApplication. The application manages our main loop,
     // application windows, integration with the window manager/compositor, and

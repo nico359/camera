@@ -4,12 +4,19 @@
   <requires lib="Adw" version="1.0"/>
   <template class="CameraWindow" parent="AdwApplicationWindow">
     <property name="title" translatable="yes">Camera</property>
-    <property name="default-width">800</property>
-    <property name="default-height">600</property>
+    <property name="default-width">480</property>
+    <property name="default-height">800</property>
     <property name="content">
       <object class="AdwToolbarView">
         <child type="top">
           <object class="AdwHeaderBar">
+            <child type="start">
+              <object class="GtkButton" id="switch_button">
+                <property name="action-name">win.switch-camera</property>
+                <property name="icon-name">camera-switch-symbolic</property>
+                <property name="tooltip-text" translatable="yes">Switch Camera</property>
+              </object>
+            </child>
             <child type="end">
               <object class="GtkMenuButton">
                 <property name="primary">True</property>
@@ -21,11 +28,58 @@
           </object>
         </child>
         <property name="content">
-          <object class="GtkLabel" id="label">
-            <property name="label" translatable="yes">Hello, World!</property>
-            <style>
-              <class name="title-1"/>
-            </style>
+          <object class="AdwToastOverlay" id="toast_overlay">
+            <property name="child">
+              <object class="GtkOverlay">
+                <property name="child">
+                  <object class="CameraView" id="camera_view">
+                    <property name="hexpand">True</property>
+                    <property name="vexpand">True</property>
+                  </object>
+                </property>
+                <child type="overlay">
+                  <object class="GtkLabel" id="status_label">
+                    <property name="label" translatable="yes">Starting camera…</property>
+                    <property name="halign">center</property>
+                    <property name="valign">center</property>
+                    <property name="justify">center</property>
+                    <property name="wrap">True</property>
+                    <property name="max-width-chars">40</property>
+                    <property name="margin-start">24</property>
+                    <property name="margin-end">24</property>
+                    <style>
+                      <class name="title-4"/>
+                      <class name="osd"/>
+                    </style>
+                  </object>
+                </child>
+                <child type="overlay">
+                  <object class="GtkBox">
+                    <property name="halign">center</property>
+                    <property name="valign">end</property>
+                    <property name="margin-bottom">28</property>
+                    <child>
+                      <object class="GtkButton" id="shutter_button">
+                        <property name="action-name">win.capture</property>
+                        <property name="width-request">72</property>
+                        <property name="height-request">72</property>
+                        <property name="tooltip-text" translatable="yes">Take Photo</property>
+                        <style>
+                          <class name="circular"/>
+                          <class name="suggested-action"/>
+                        </style>
+                        <child>
+                          <object class="GtkImage">
+                            <property name="icon-name">camera-photo-symbolic</property>
+                            <property name="pixel-size">32</property>
+                          </object>
+                        </child>
+                      </object>
+                    </child>
+                  </object>
+                </child>
+              </object>
+            </property>
           </object>
         </property>
       </object>
@@ -34,16 +88,12 @@
   <menu id="primary_menu">
     <section>
       <item>
-        <attribute name="label" translatable="yes">_Preferences</attribute>
-        <attribute name="action">app.preferences</attribute>
-      </item>
-      <item>
-        <attribute name="label" translatable="yes">_Keyboard Shortcuts</attribute>
-        <attribute name="action">app.shortcuts</attribute>
-      </item>
-      <item>
         <attribute name="label" translatable="yes">_About Camera</attribute>
         <attribute name="action">app.about</attribute>
+      </item>
+      <item>
+        <attribute name="label" translatable="yes">_Quit</attribute>
+        <attribute name="action">app.quit</attribute>
       </item>
     </section>
   </menu>
