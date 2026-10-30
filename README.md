@@ -10,9 +10,16 @@ a Flatpak, and it leaves room for a V4L2/libcamera backend later.
 
 Implemented:
 
-- live preview through `GtkGLArea`, letterboxed to the still aspect ratio
+- live preview through `GtkGLArea`, letterboxed to the still aspect ratio and
+  redrawn at the engine's capture rate (30 fps)
 - full-resolution JPEG capture (the engine asks the sensor for its largest
   JPEG stream; on the FuriPhone this is 5152×3864)
+- asynchronous capture feedback: the UI reports when the JPEG is actually
+  written, not when the request is submitted
+- a last-shot thumbnail with an in-app review dialog and a hand-off to the
+  system image viewer
+- adaptive controls: the shutter row moves to the right edge in landscape
+  while the preview itself stays portrait-locked
 - device-rotation-aware still capture through iio-sensor-proxy
 - camera cycling through every enumerated camera, including the secondary
   back camera

@@ -42,7 +42,8 @@ mod imp {
         rotation_source: RefCell<Option<DeviceRotation>>,
         rotation_tick: RefCell<Option<glib::SourceId>>,
 
-        tick: RefCell<Option<gtk::TickCallbackId>>,
+        pub(super) photo_callback: RefCell<Option<Box<dyn Fn(&str, bool)>>>,
+        render_timeout: RefCell<Option<glib::SourceId>>,
     }
 
     #[glib::object_subclass]
@@ -81,6 +82,7 @@ mod imp {
             let rotation_source = DeviceRotation::new();
             let degrees = rotation_source.degrees();
             obj.set_device_rotation(degrees);
+            self.install_photo_bridge();
 
             let result = {
                 let mut session = self.session.borrow_mut();
@@ -139,26 +141,51 @@ mod imp {
 
     impl CameraView {
         fn start_tick(&self) {
-            if self.tick.borrow().is_some() {
+            if self.render_timeout.borrow().is_some() {
                 return;
             }
 
+            // The engine delivers at 30 fps, so redrawing at 60 fps only burns
+            // CPU.  A frame-callback-driven repaint would be even better, but
+            // this timeout is the low-risk half of that fix.
             let weak = self.obj().downgrade();
-            let id = self.obj().add_tick_callback(move |_, _| match weak.upgrade() {
-                Some(view) => {
-                    view.queue_render();
-                    glib::ControlFlow::Continue
-                }
-                None => glib::ControlFlow::Break,
-            });
+            let id =
+                glib::timeout_add_local(Duration::from_millis(33), move || match weak.upgrade() {
+                    Some(view) => {
+                        view.queue_render();
+                        glib::ControlFlow::Continue
+                    }
+                    None => glib::ControlFlow::Break,
+                });
 
-            *self.tick.borrow_mut() = Some(id);
+            *self.render_timeout.borrow_mut() = Some(id);
         }
 
         fn stop_tick(&self) {
-            if let Some(id) = self.tick.borrow_mut().take() {
+            if let Some(id) = self.render_timeout.borrow_mut().take() {
                 id.remove();
             }
+        }
+
+        fn install_photo_bridge(&self) {
+            let weak = glib::SendWeakRef::from(self.obj().downgrade());
+            let callback = Box::new(move |path: &str, ok: bool| {
+                let path = path.to_owned();
+                let weak = weak.clone();
+                // `idle_add_once` always queues on the default main context,
+                // unlike `MainContext::invoke`, which may run the closure on
+                // the calling (camera/writer) thread.
+                glib::idle_add_once(move || {
+                    if let Some(view) = weak.upgrade() {
+                        let callback = view.imp().photo_callback.borrow();
+                        if let Some(callback) = callback.as_ref() {
+                            callback(&path, ok);
+                        }
+                    }
+                });
+            });
+
+            self.session.borrow().set_photo_callback(Some(callback));
         }
 
         fn start_rotation_tick(&self) {
@@ -167,8 +194,8 @@ mod imp {
             }
 
             let weak = self.obj().downgrade();
-            let id = glib::timeout_add_local(Duration::from_millis(250), move || {
-                match weak.upgrade() {
+            let id =
+                glib::timeout_add_local(Duration::from_millis(250), move || match weak.upgrade() {
                     Some(view) => {
                         let degrees = view
                             .imp()
@@ -181,8 +208,7 @@ mod imp {
                         glib::ControlFlow::Continue
                     }
                     None => glib::ControlFlow::Break,
-                }
-            });
+                });
 
             *self.rotation_tick.borrow_mut() = Some(id);
         }
@@ -217,10 +243,7 @@ impl CameraView {
         }
 
         self.set_device_rotation(degrees);
-        self.imp()
-            .session
-            .borrow_mut()
-            .set_device_rotation(degrees);
+        self.imp().session.borrow_mut().set_device_rotation(degrees);
     }
 
     pub fn switch_camera(&self) -> Result<CameraInfo, CameraError> {
@@ -251,6 +274,32 @@ impl CameraView {
                 Err(error)
             }
         }
+    }
+
+    /// Aspect ratio of the preview area.  The preview is deliberately
+    /// portrait-locked, so a 4:3 stream from a 90°/270°-mounted sensor is
+    /// shown as 3:4; a 0°/180° sensor stays 4:3.
+    pub fn preview_aspect(&self) -> f32 {
+        let sensor = self
+            .imp()
+            .session
+            .borrow()
+            .sensor_orientation()
+            .rem_euclid(360);
+        if sensor % 180 == 90 {
+            3.0 / 4.0
+        } else {
+            4.0 / 3.0
+        }
+    }
+
+    /// Set the main-thread callback invoked after a still is written (or
+    /// fails).  The camera thread marshals through `install_photo_bridge`.
+    pub fn set_photo_callback<F>(&self, callback: F)
+    where
+        F: Fn(&str, bool) + 'static,
+    {
+        *self.imp().photo_callback.borrow_mut() = Some(Box::new(callback));
     }
 
     pub fn capture_photo(&self, path: &Path) -> Result<(), CameraError> {

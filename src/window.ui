@@ -64,11 +64,41 @@
                   </object>
                 </child>
                 <child type="overlay">
-                  <object class="GtkBox">
-                    <property name="halign">center</property>
+                  <object class="GtkCenterBox" id="controls">
+                    <property name="halign">fill</property>
                     <property name="valign">end</property>
+                    <property name="margin-start">24</property>
+                    <property name="margin-end">24</property>
                     <property name="margin-bottom">28</property>
-                    <child>
+                    <child type="start">
+                      <object class="GtkBox">
+                        <property name="width-request">56</property>
+                        <property name="height-request">56</property>
+                        <property name="valign">center</property>
+                        <child>
+                          <object class="GtkButton" id="last_photo_button">
+                            <property name="visible">False</property>
+                            <property name="action-name">win.open-last-photo</property>
+                            <property name="width-request">56</property>
+                            <property name="height-request">56</property>
+                            <property name="valign">center</property>
+                            <property name="tooltip-text" translatable="yes">Open Last Photo</property>
+                            <style>
+                              <class name="flat"/>
+                            </style>
+                            <child>
+                              <object class="GtkPicture" id="last_photo_picture">
+                                <property name="width-request">48</property>
+                                <property name="height-request">48</property>
+                                <property name="content-fit">cover</property>
+                                <property name="can-shrink">True</property>
+                              </object>
+                            </child>
+                          </object>
+                        </child>
+                      </object>
+                    </child>
+                    <child type="center">
                       <object class="GtkButton" id="shutter_button">
                         <property name="action-name">win.capture</property>
                         <property name="width-request">72</property>
@@ -84,6 +114,12 @@
                             <property name="pixel-size">32</property>
                           </object>
                         </child>
+                      </object>
+                    </child>
+                    <child type="end">
+                      <object class="GtkBox">
+                        <property name="width-request">56</property>
+                        <property name="height-request">56</property>
                       </object>
                     </child>
                   </object>

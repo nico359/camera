@@ -7,13 +7,18 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use gtk::glib;
 
-/// Build a unique path under the user's Pictures/Camera directory.
-pub fn next_photo_path() -> Result<PathBuf, String> {
+/// The directory where captures are stored.  It is not created here.
+pub fn photo_directory() -> Result<PathBuf, String> {
     let pictures = glib::user_special_dir(glib::UserDirectory::Pictures)
         .or_else(|| std::env::var_os("HOME").map(PathBuf::from))
         .ok_or_else(|| "no Pictures directory is configured".to_string())?;
 
-    let directory = pictures.join("Camera");
+    Ok(pictures.join("Camera"))
+}
+
+/// Build a unique path under the user's Pictures/Camera directory.
+pub fn next_photo_path() -> Result<PathBuf, String> {
+    let directory = photo_directory()?;
     std::fs::create_dir_all(&directory)
         .map_err(|error| format!("could not create {}: {error}", directory.display()))?;
 
