@@ -1,0 +1,5 @@
+/target
+/builddir
+/_build
+/build
+*.flatpak

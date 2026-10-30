@@ -56,6 +56,7 @@ dependencies = [
 name = "camera"
 version = "0.1.0"
 dependencies = [
+ "cc",
  "gettext-rs",
  "gtk4",
  "libadwaita",

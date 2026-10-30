@@ -28,16 +28,20 @@ run_command(
   check: true
 )
 
-cargo_bin  = find_program('cargo')
-cargo_opt  = [ '--manifest-path', meson.project_source_root() / 'Cargo.toml' ]
-cargo_opt += [ '--target-dir', meson.project_build_root()  / 'src' ]
-cargo_env  = [ 'CARGO_HOME=' + meson.project_build_root()  / 'cargo-home' ]
+cargo_bin = find_program('cargo')
+cargo_home = meson.project_build_root() / 'cargo-home'
+cargo_target_dir = meson.project_build_root() / 'src'
 
+cargo_args = []
 if get_option('buildtype') == 'release'
-  cargo_opt += [ '--release' ]
+  cargo_args += ['--release']
   rust_target = 'release'
 else
   rust_target = 'debug'
+endif
+
+if get_option('camera2')
+  cargo_args += ['--features', 'camera2']
 endif
 
 cargo_build = custom_target(
@@ -49,8 +53,13 @@ cargo_build = custom_target(
   install: true,
   install_dir: get_option('bindir'),
   command: [
-    'env', cargo_env,
-    cargo_bin, 'build',
-    cargo_opt, '&&', 'cp', 'src' / rust_target / meson.project_name(), '@OUTPUT@',
-  ]
+    find_program('sh'),
+    meson.project_source_root() / 'build-aux' / 'cargo-build.sh',
+    cargo_bin.full_path(),
+    cargo_home,
+    meson.project_source_root() / 'Cargo.toml',
+    cargo_target_dir,
+    cargo_target_dir / rust_target / meson.project_name(),
+    '@OUTPUT@',
+  ] + cargo_args,
 )

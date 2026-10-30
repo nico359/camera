@@ -1,0 +1,5 @@
+option('camera2',
+  type: 'boolean',
+  value: false,
+  description: 'Build the FuriCam Camera2 backend (Halium/FuriOS devices only)',
+)
