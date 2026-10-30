@@ -8,15 +8,18 @@
 
 use std::cell::{Cell, RefCell};
 use std::path::Path;
+use std::time::Duration;
 
+use gtk::gio::prelude::*;
 use gtk::glib;
 use gtk::prelude::*;
 use gtk::subclass::prelude::*;
 
-use crate::camera::{CameraError, CameraSession, Facing};
+use crate::camera::{CameraError, CameraInfo, CameraSession};
+use crate::device_rotation::DeviceRotation;
 
 const PREVIEW_WIDTH: i32 = 1280;
-const PREVIEW_HEIGHT: i32 = 720;
+const PREVIEW_HEIGHT: i32 = 960;
 
 mod imp {
     use super::*;
@@ -32,6 +35,12 @@ mod imp {
 
         #[property(get, set)]
         ready: Cell<bool>,
+
+        #[property(get, set)]
+        device_rotation: Cell<i32>,
+
+        rotation_source: RefCell<Option<DeviceRotation>>,
+        rotation_tick: RefCell<Option<glib::SourceId>>,
 
         tick: RefCell<Option<gtk::TickCallbackId>>,
     }
@@ -69,15 +78,23 @@ mod imp {
                 return;
             }
 
+            let rotation_source = DeviceRotation::new();
+            let degrees = rotation_source.degrees();
+            obj.set_device_rotation(degrees);
+
             let result = {
                 let mut session = self.session.borrow_mut();
                 session
-                    .open(Facing::Back)
+                    .open_first()
                     .and_then(|()| session.start_preview(PREVIEW_WIDTH, PREVIEW_HEIGHT))
             };
 
             match result {
                 Ok(()) => {
+                    self.session.borrow_mut().set_device_rotation(degrees);
+                    *self.rotation_source.borrow_mut() = Some(rotation_source);
+                    self.start_rotation_tick();
+
                     obj.set_status("");
                     obj.set_ready(true);
                     self.start_tick();
@@ -96,6 +113,8 @@ mod imp {
             let obj = self.obj();
             obj.make_current();
             self.session.borrow_mut().close();
+            self.stop_rotation_tick();
+            self.rotation_source.borrow_mut().take();
             obj.set_ready(false);
 
             self.parent_unrealize();
@@ -108,9 +127,9 @@ mod imp {
             let scale = obj.scale_factor();
 
             let mut session = self.session.borrow_mut();
-            // Match the upstream camera2_gtk prototype: the sensor is mounted
-            // at 90 degrees on the FuriPhone and the renderer expects the
-            // extra half-turn to keep the preview upright in portrait.
+            // The preview is deliberately portrait-locked: only the saved
+            // still/video follows the device tilt. FuriCam does the same, and
+            // a rotating preview inside a fixed window is disorienting.
             let rotation = (session.sensor_orientation() + 180).rem_euclid(360);
             session.render_preview(obj.width() * scale, obj.height() * scale, rotation);
 
@@ -141,6 +160,38 @@ mod imp {
                 id.remove();
             }
         }
+
+        fn start_rotation_tick(&self) {
+            if self.rotation_tick.borrow().is_some() {
+                return;
+            }
+
+            let weak = self.obj().downgrade();
+            let id = glib::timeout_add_local(Duration::from_millis(250), move || {
+                match weak.upgrade() {
+                    Some(view) => {
+                        let degrees = view
+                            .imp()
+                            .rotation_source
+                            .borrow()
+                            .as_ref()
+                            .map(DeviceRotation::degrees)
+                            .unwrap_or(0);
+                        view.apply_device_rotation(degrees);
+                        glib::ControlFlow::Continue
+                    }
+                    None => glib::ControlFlow::Break,
+                }
+            });
+
+            *self.rotation_tick.borrow_mut() = Some(id);
+        }
+
+        fn stop_rotation_tick(&self) {
+            if let Some(id) = self.rotation_tick.borrow_mut().take() {
+                id.remove();
+            }
+        }
     }
 }
 
@@ -160,7 +211,19 @@ impl CameraView {
         let _ = Self::static_type();
     }
 
-    pub fn switch_camera(&self) -> Result<(), CameraError> {
+    fn apply_device_rotation(&self, degrees: i32) {
+        if self.device_rotation() == degrees {
+            return;
+        }
+
+        self.set_device_rotation(degrees);
+        self.imp()
+            .session
+            .borrow_mut()
+            .set_device_rotation(degrees);
+    }
+
+    pub fn switch_camera(&self) -> Result<CameraInfo, CameraError> {
         if !self.imp().session.borrow().is_open() {
             return Err(CameraError::NotOpen);
         }
@@ -169,17 +232,18 @@ impl CameraView {
 
         let result = {
             let mut session = self.imp().session.borrow_mut();
-            let facing = session.facing().opposite();
-            session
-                .open(facing)
-                .and_then(|()| session.start_preview(PREVIEW_WIDTH, PREVIEW_HEIGHT))
+            session.switch().and_then(|info| {
+                session
+                    .start_preview(PREVIEW_WIDTH, PREVIEW_HEIGHT)
+                    .map(|()| info)
+            })
         };
 
         match result {
-            Ok(()) => {
+            Ok(info) => {
                 self.set_status("");
                 self.set_ready(true);
-                Ok(())
+                Ok(info)
             }
             Err(error) => {
                 self.set_status(format!("Camera unavailable: {error}"));
@@ -190,7 +254,9 @@ impl CameraView {
     }
 
     pub fn capture_photo(&self, path: &Path) -> Result<(), CameraError> {
-        self.imp().session.borrow_mut().capture_photo(path)
+        let mut session = self.imp().session.borrow_mut();
+        session.set_device_rotation(self.device_rotation());
+        session.capture_photo(path)
     }
 }
 

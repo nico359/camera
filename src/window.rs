@@ -171,11 +171,12 @@ impl CameraWindow {
     }
 
     fn switch_camera(&self) {
-        if let Err(error) = self.imp().camera_view.switch_camera() {
-            self.show_toast(&format!(
+        match self.imp().camera_view.switch_camera() {
+            Ok(info) => self.show_toast(&info.label),
+            Err(error) => self.show_toast(&format!(
                 "{}: {error}",
                 gettext("Could not switch camera")
-            ));
+            )),
         }
     }
 

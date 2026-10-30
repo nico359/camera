@@ -10,10 +10,13 @@ a Flatpak, and it leaves room for a V4L2/libcamera backend later.
 
 Implemented:
 
-- live preview through `GtkGLArea`
+- live preview through `GtkGLArea`, letterboxed to the still aspect ratio
 - full-resolution JPEG capture (the engine asks the sensor for its largest
   JPEG stream; on the FuriPhone this is 5152×3864)
-- front/back camera switching
+- device-rotation-aware still capture through iio-sensor-proxy
+- camera cycling through every enumerated camera, including the secondary
+  back camera
+- front-camera preview mirroring
 - a Flatpak manifest with the permissions the Halium camera stack needs
 
 Not implemented yet:
