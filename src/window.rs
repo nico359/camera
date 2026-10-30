@@ -18,8 +18,9 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
 
 use adw::prelude::*;
 use adw::subclass::prelude::*;
@@ -47,7 +48,28 @@ mod imp {
         pub last_photo_button: TemplateChild<gtk::Button>,
 
         #[template_child]
+        pub last_media_stack: TemplateChild<gtk::Stack>,
+
+        #[template_child]
         pub last_photo_picture: TemplateChild<gtk::Picture>,
+
+        #[template_child]
+        pub last_video_icon: TemplateChild<gtk::Image>,
+
+        #[template_child]
+        pub shutter_button: TemplateChild<gtk::Button>,
+
+        #[template_child]
+        pub shutter_image: TemplateChild<gtk::Image>,
+
+        #[template_child]
+        pub video_mode_button: TemplateChild<gtk::Button>,
+
+        #[template_child]
+        pub video_mode_image: TemplateChild<gtk::Image>,
+
+        #[template_child]
+        pub recording_label: TemplateChild<gtk::Label>,
 
         #[template_child]
         pub status_label: TemplateChild<gtk::Label>,
@@ -55,11 +77,15 @@ mod imp {
         #[template_child]
         pub toast_overlay: TemplateChild<adw::ToastOverlay>,
 
-        pub(super) last_photo_path: RefCell<Option<PathBuf>>,
-        capture_action: RefCell<Option<gio::SimpleAction>>,
-        switch_action: RefCell<Option<gio::SimpleAction>>,
-        select_action: RefCell<Option<gio::SimpleAction>>,
-        pub(super) last_photo_action: RefCell<Option<gio::SimpleAction>>,
+        pub(super) last_media_path: RefCell<Option<PathBuf>>,
+        pub(super) capture_action: RefCell<Option<gio::SimpleAction>>,
+        pub(super) switch_action: RefCell<Option<gio::SimpleAction>>,
+        pub(super) select_action: RefCell<Option<gio::SimpleAction>>,
+        pub(super) video_mode_action: RefCell<Option<gio::SimpleAction>>,
+        pub(super) last_media_action: RefCell<Option<gio::SimpleAction>>,
+        pub(super) recording_started: Cell<Option<Instant>>,
+        pub(super) recording_tick: RefCell<Option<glib::SourceId>>,
+        pub(super) recording_path: RefCell<Option<PathBuf>>,
     }
 
     #[glib::object_subclass]
@@ -82,7 +108,7 @@ mod imp {
             self.parent_constructed();
             self.setup_actions();
             self.setup_status();
-            self.obj().load_latest_photo();
+            self.obj().load_latest_media();
         }
     }
 
@@ -100,7 +126,7 @@ mod imp {
             let weak = window.downgrade();
             capture.connect_activate(move |_, _| {
                 if let Some(window) = weak.upgrade() {
-                    window.capture_photo();
+                    window.shutter();
                 }
             });
             window.add_action(&capture);
@@ -128,15 +154,25 @@ mod imp {
             });
             window.add_action(&select);
 
-            let last_photo = gio::SimpleAction::new("open-last-photo", None);
-            last_photo.set_enabled(false);
+            let video_mode = gio::SimpleAction::new("toggle-video-mode", None);
+            video_mode.set_enabled(false);
             let weak = window.downgrade();
-            last_photo.connect_activate(move |_, _| {
+            video_mode.connect_activate(move |_, _| {
                 if let Some(window) = weak.upgrade() {
-                    window.open_last_photo();
+                    window.toggle_video_mode();
                 }
             });
-            window.add_action(&last_photo);
+            window.add_action(&video_mode);
+
+            let last_media = gio::SimpleAction::new("open-last-media", None);
+            last_media.set_enabled(false);
+            let weak = window.downgrade();
+            last_media.connect_activate(move |_, _| {
+                if let Some(window) = weak.upgrade() {
+                    window.open_last_media();
+                }
+            });
+            window.add_action(&last_media);
 
             let settings = gio::Settings::new("io.github.nico359.camera");
             let ask_open_with = gio::SimpleAction::new_stateful(
@@ -154,9 +190,9 @@ mod imp {
                 action.set_state(&value.to_variant());
                 if let Some(window) = weak.upgrade() {
                     let message = if value {
-                        gettext("Photos will open with an app chooser")
+                        gettext("Media will open with an app chooser")
                     } else {
-                        gettext("Photos will open in the default viewer")
+                        gettext("Media will open in the default viewer")
                     };
                     window.show_toast(&message);
                 }
@@ -166,42 +202,27 @@ mod imp {
             if let Some(application) = window.application() {
                 application.set_accels_for_action("win.capture", &["space"]);
                 application.set_accels_for_action("win.switch-camera", &["s"]);
+                application.set_accels_for_action("win.toggle-video-mode", &["v"]);
             }
 
             *self.capture_action.borrow_mut() = Some(capture);
             *self.switch_action.borrow_mut() = Some(switch);
             *self.select_action.borrow_mut() = Some(select);
-            *self.last_photo_action.borrow_mut() = Some(last_photo);
+            *self.video_mode_action.borrow_mut() = Some(video_mode);
+            *self.last_media_action.borrow_mut() = Some(last_media);
         }
 
         fn setup_status(&self) {
             let view = self.camera_view.get();
 
             let label = self.status_label.get();
-            let frame = self.preview_frame.get();
-            let menu_button = self.camera_menu_button.get();
-            let capture = self.capture_action.borrow().clone();
-            let switch = self.switch_action.borrow().clone();
-            let select = self.select_action.borrow().clone();
+            let weak = self.obj().downgrade();
 
             view.connect_notify_local(Some("ready"), move |view, _| {
-                let ready = view.ready();
-
-                if let Some(action) = capture.as_ref() {
-                    action.set_enabled(ready);
+                label.set_visible(!view.ready());
+                if let Some(window) = weak.upgrade() {
+                    window.update_mode_ui();
                 }
-                if let Some(action) = switch.as_ref() {
-                    action.set_enabled(ready);
-                }
-                if let Some(action) = select.as_ref() {
-                    action.set_enabled(ready);
-                }
-                menu_button.set_sensitive(ready);
-
-                if ready {
-                    frame.set_ratio(view.preview_aspect());
-                }
-                label.set_visible(!ready);
             });
 
             let label = self.status_label.get();
@@ -236,8 +257,187 @@ impl CameraWindow {
             .build()
     }
 
+    fn shutter(&self) {
+        let view = self.imp().camera_view.get();
+        if view.video_mode() {
+            if view.is_recording() {
+                self.stop_recording();
+            } else {
+                self.start_recording();
+            }
+        } else {
+            self.capture_photo();
+        }
+    }
+
+    fn toggle_video_mode(&self) {
+        let view = self.imp().camera_view.get();
+        if view.is_recording() {
+            self.show_toast(&gettext("Stop recording first"));
+            return;
+        }
+
+        let enabled = !view.video_mode();
+        match view.set_video_mode(enabled) {
+            Ok(()) => {
+                self.update_mode_ui();
+            }
+            Err(error) => {
+                self.update_mode_ui();
+                self.show_toast(&format!("{}: {error}", gettext("Could not switch mode")));
+            }
+        }
+    }
+
+    fn update_mode_ui(&self) {
+        let imp = self.imp();
+        let view = imp.camera_view.get();
+        let ready = view.ready();
+        let video = view.video_mode();
+        let recording = view.is_recording();
+
+        if let Some(action) = imp.capture_action.borrow().as_ref() {
+            action.set_enabled(ready);
+        }
+        if let Some(action) = imp.switch_action.borrow().as_ref() {
+            action.set_enabled(ready && !video && !recording);
+        }
+        if let Some(action) = imp.select_action.borrow().as_ref() {
+            action.set_enabled(ready && !video && !recording);
+        }
+        if let Some(action) = imp.video_mode_action.borrow().as_ref() {
+            action.set_enabled(ready && !recording);
+        }
+
+        imp.camera_menu_button
+            .set_sensitive(ready && !video && !recording);
+        imp.preview_frame.set_ratio(view.preview_aspect());
+
+        if video {
+            imp.video_mode_image
+                .set_icon_name(Some("camera-photo-symbolic"));
+            imp.video_mode_button
+                .set_tooltip_text(Some(&gettext("Switch to Photo")));
+        } else {
+            imp.video_mode_image
+                .set_icon_name(Some("camera-video-symbolic"));
+            imp.video_mode_button
+                .set_tooltip_text(Some(&gettext("Switch to Video")));
+        }
+
+        if recording {
+            imp.shutter_image
+                .set_icon_name(Some("media-playback-stop-symbolic"));
+            imp.shutter_button
+                .set_tooltip_text(Some(&gettext("Stop Recording")));
+            imp.shutter_button.remove_css_class("suggested-action");
+            imp.shutter_button.add_css_class("destructive-action");
+        } else if video {
+            imp.shutter_image
+                .set_icon_name(Some("media-record-symbolic"));
+            imp.shutter_button
+                .set_tooltip_text(Some(&gettext("Start Recording")));
+            imp.shutter_button.remove_css_class("suggested-action");
+            imp.shutter_button.add_css_class("destructive-action");
+        } else {
+            imp.shutter_image
+                .set_icon_name(Some("camera-photo-symbolic"));
+            imp.shutter_button
+                .set_tooltip_text(Some(&gettext("Take Photo")));
+            imp.shutter_button.remove_css_class("destructive-action");
+            imp.shutter_button.add_css_class("suggested-action");
+        }
+
+        if !recording {
+            self.stop_recording_tick();
+            imp.recording_started.set(None);
+            imp.recording_label.set_visible(false);
+        }
+    }
+
+    fn start_recording(&self) {
+        let path = match crate::media::next_video_path() {
+            Ok(path) => path,
+            Err(error) => {
+                self.show_toast(&format!("{}: {error}", gettext("Could not prepare video")));
+                return;
+            }
+        };
+
+        match self.imp().camera_view.start_recording(&path) {
+            Ok(()) => {
+                *self.imp().recording_path.borrow_mut() = Some(path);
+                self.imp().recording_started.set(Some(Instant::now()));
+                self.imp().recording_label.set_label("● 00:00");
+                self.imp().recording_label.set_visible(true);
+                self.start_recording_tick();
+                self.update_mode_ui();
+            }
+            Err(error) => {
+                self.show_toast(&format!(
+                    "{}: {error}",
+                    gettext("Could not start recording")
+                ));
+            }
+        }
+    }
+
+    fn stop_recording(&self) {
+        let path = self.imp().recording_path.borrow_mut().take();
+        let result = self.imp().camera_view.stop_recording();
+
+        self.stop_recording_tick();
+        self.imp().recording_started.set(None);
+        self.imp().recording_label.set_visible(false);
+        self.update_mode_ui();
+
+        match result {
+            Ok(false) => {
+                if let Some(path) = path {
+                    self.update_media_thumbnail(&path);
+                }
+                self.show_short_toast(&gettext("Video saved"));
+            }
+            Ok(true) => self.show_toast(&gettext("Video may be incomplete")),
+            Err(error) => {
+                self.show_toast(&format!("{}: {error}", gettext("Recording failed")));
+            }
+        }
+    }
+
+    fn start_recording_tick(&self) {
+        if self.imp().recording_tick.borrow().is_some() {
+            return;
+        }
+
+        let weak = self.downgrade();
+        let id = glib::timeout_add_local(Duration::from_secs(1), move || match weak.upgrade() {
+            Some(window) => {
+                let Some(started) = window.imp().recording_started.get() else {
+                    return glib::ControlFlow::Break;
+                };
+                let seconds = started.elapsed().as_secs();
+                window.imp().recording_label.set_label(&format!(
+                    "● {:02}:{:02}",
+                    seconds / 60,
+                    seconds % 60
+                ));
+                glib::ControlFlow::Continue
+            }
+            None => glib::ControlFlow::Break,
+        });
+
+        *self.imp().recording_tick.borrow_mut() = Some(id);
+    }
+
+    fn stop_recording_tick(&self) {
+        if let Some(id) = self.imp().recording_tick.borrow_mut().take() {
+            id.remove();
+        }
+    }
+
     fn capture_photo(&self) {
-        let path = match crate::photo::next_photo_path() {
+        let path = match crate::media::next_photo_path() {
             Ok(path) => path,
             Err(error) => {
                 self.show_toast(&format!("{}: {error}", gettext("Could not prepare photo")));
@@ -262,7 +462,7 @@ impl CameraWindow {
                 self.update_camera_menu();
                 let view = self.imp().camera_view.get();
                 self.imp().preview_frame.set_ratio(view.preview_aspect());
-                self.show_toast(&info.label);
+                self.show_short_toast(&info.label);
             }
             Err(error) => {
                 self.show_toast(&format!("{}: {error}", gettext("Could not switch camera")))
@@ -276,7 +476,7 @@ impl CameraWindow {
                 self.update_camera_menu();
                 let view = self.imp().camera_view.get();
                 self.imp().preview_frame.set_ratio(view.preview_aspect());
-                self.show_toast(&info.label);
+                self.show_short_toast(&info.label);
             }
             Err(error) => {
                 self.show_toast(&format!("{}: {error}", gettext("Could not switch camera")))
@@ -308,21 +508,41 @@ impl CameraWindow {
 
     fn on_photo_result(&self, path: &str, ok: bool) {
         if ok {
-            self.update_thumbnail(Path::new(path));
-            self.show_toast(&gettext("Photo saved"));
+            self.update_media_thumbnail(Path::new(path));
+            self.show_short_toast(&gettext("Photo saved"));
         } else {
             self.show_toast(&gettext("Could not save photo"));
         }
     }
 
-    fn update_thumbnail(&self, path: &Path) {
+    fn update_media_thumbnail(&self, path: &Path) {
+        let is_video = path
+            .extension()
+            .and_then(|extension| extension.to_str())
+            .is_some_and(|extension| extension.eq_ignore_ascii_case("mp4"));
+
+        if is_video {
+            self.imp()
+                .last_media_stack
+                .set_visible_child(&self.imp().last_video_icon.get());
+            self.imp().last_photo_button.set_visible(true);
+            *self.imp().last_media_path.borrow_mut() = Some(path.to_path_buf());
+            if let Some(action) = self.imp().last_media_action.borrow().as_ref() {
+                action.set_enabled(true);
+            }
+            return;
+        }
+
         match gtk::gdk_pixbuf::Pixbuf::from_file_at_scale(path, 48, 48, true) {
             Ok(pixbuf) => {
                 let texture = gtk::gdk::Texture::for_pixbuf(&pixbuf);
                 self.imp().last_photo_picture.set_paintable(Some(&texture));
+                self.imp()
+                    .last_media_stack
+                    .set_visible_child(&self.imp().last_photo_picture.get());
                 self.imp().last_photo_button.set_visible(true);
-                *self.imp().last_photo_path.borrow_mut() = Some(path.to_path_buf());
-                if let Some(action) = self.imp().last_photo_action.borrow().as_ref() {
+                *self.imp().last_media_path.borrow_mut() = Some(path.to_path_buf());
+                if let Some(action) = self.imp().last_media_action.borrow().as_ref() {
                     action.set_enabled(true);
                 }
             }
@@ -330,41 +550,18 @@ impl CameraWindow {
         }
     }
 
-    fn load_latest_photo(&self) {
-        let Ok(directory) = crate::photo::photo_directory() else {
-            return;
-        };
-        let Ok(entries) = std::fs::read_dir(&directory) else {
-            return;
-        };
-
-        let latest = entries
-            .filter_map(|entry| entry.ok())
-            .filter(|entry| {
-                entry
-                    .path()
-                    .extension()
-                    .and_then(|extension| extension.to_str())
-                    .is_some_and(|extension| extension.eq_ignore_ascii_case("jpg"))
-            })
-            .max_by_key(|entry| {
-                entry
-                    .metadata()
-                    .and_then(|metadata| metadata.modified())
-                    .ok()
-            });
-
-        if let Some(entry) = latest {
-            self.update_thumbnail(&entry.path());
+    fn load_latest_media(&self) {
+        if let Some(path) = crate::media::latest_media() {
+            self.update_media_thumbnail(&path);
         }
     }
 
-    fn open_last_photo(&self) {
-        let Some(path) = self.imp().last_photo_path.borrow().clone() else {
+    fn open_last_media(&self) {
+        let Some(path) = self.imp().last_media_path.borrow().clone() else {
             return;
         };
         if !path.exists() {
-            self.show_toast(&gettext("Photo not found"));
+            self.show_toast(&gettext("Media not found"));
             return;
         }
 
@@ -376,7 +573,7 @@ impl CameraWindow {
         // for the chooser, launch the host's default handler instead.  This
         // needs --talk-name=org.freedesktop.Flatpak in the manifest.
         if !ask {
-            if let Err(error) = open_with_host(&path) {
+            if let Err(error) = crate::media::open_with_host(&path) {
                 eprintln!("host open failed, falling back to the portal: {error}");
             } else {
                 return;
@@ -391,7 +588,7 @@ impl CameraWindow {
         launcher.launch(Some(self), None::<&gio::Cancellable>, move |result| {
             if let Err(error) = result {
                 if let Some(window) = weak.upgrade() {
-                    window.show_toast(&format!("{}: {error}", gettext("Could not open photo")));
+                    window.show_toast(&format!("{}: {error}", gettext("Could not open media")));
                 }
             }
         });
@@ -400,20 +597,10 @@ impl CameraWindow {
     fn show_toast(&self, message: &str) {
         self.imp().toast_overlay.add_toast(adw::Toast::new(message));
     }
-}
 
-fn open_with_host(path: &Path) -> Result<(), String> {
-    let status = std::process::Command::new("flatpak-spawn")
-        .arg("--host")
-        .arg("gio")
-        .arg("open")
-        .arg(path)
-        .status()
-        .map_err(|error| error.to_string())?;
-
-    if status.success() {
-        Ok(())
-    } else {
-        Err(format!("flatpak-spawn exited with {status}"))
+    fn show_short_toast(&self, message: &str) {
+        let toast = adw::Toast::new(message);
+        toast.set_timeout(2);
+        self.imp().toast_overlay.add_toast(toast);
     }
 }

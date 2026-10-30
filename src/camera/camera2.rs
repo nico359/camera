@@ -47,12 +47,34 @@ extern "C" {
     ) -> c_int;
     fn fc2_set_device_rotation(camera: *mut fc2_camera, degrees: c_int);
     fn fc2_set_preview_mirror(camera: *mut fc2_camera, on: c_int);
+    fn fc2_resize_preview(camera: *mut fc2_camera, width: c_int, height: c_int) -> c_int;
     fn fc2_set_frame_callback(
         camera: *mut fc2_camera,
         callback: Option<extern "C" fn(*mut c_void)>,
         user_data: *mut c_void,
     );
     fn fc2_capture_photo(camera: *mut fc2_camera, path: *const c_char) -> c_int;
+    fn fc2_start_recording(
+        camera: *mut fc2_camera,
+        path: *const c_char,
+        width: c_int,
+        height: c_int,
+        fps: c_int,
+        bitrate: c_int,
+    ) -> c_int;
+    fn fc2_stop_recording(camera: *mut fc2_camera);
+    fn fc2_enter_video_mode(
+        camera: *mut fc2_camera,
+        width: c_int,
+        height: c_int,
+        fps: c_int,
+        bitrate: c_int,
+    ) -> c_int;
+    fn fc2_exit_video_mode(camera: *mut fc2_camera);
+    fn fc2_prepare_recording(camera: *mut fc2_camera) -> c_int;
+    fn fc2_release_recording(camera: *mut fc2_camera);
+    fn fc2_is_recording(camera: *mut fc2_camera) -> c_int;
+    fn fc2_recording_write_failed(camera: *mut fc2_camera) -> c_int;
     fn fc2_set_photo_callback(
         camera: *mut fc2_camera,
         callback: Option<extern "C" fn(*mut c_void, *const c_char, c_int)>,
@@ -277,6 +299,85 @@ impl CameraBackend for Camera2Backend {
         if !self.raw.is_null() {
             unsafe { fc2_set_preview_mirror(self.raw, mirror as c_int) };
         }
+    }
+
+    fn resize_preview(&mut self, width: i32, height: i32) -> Result<(), CameraError> {
+        if self.raw.is_null() {
+            return Err(CameraError::NotOpen);
+        }
+        if unsafe { fc2_resize_preview(self.raw, width, height) } != 0 {
+            Ok(())
+        } else {
+            Err(CameraError::PreviewFailed)
+        }
+    }
+
+    fn enter_video_mode(
+        &mut self,
+        width: i32,
+        height: i32,
+        fps: i32,
+        bitrate: i32,
+    ) -> Result<(), CameraError> {
+        if self.raw.is_null() {
+            return Err(CameraError::NotOpen);
+        }
+        if unsafe { fc2_enter_video_mode(self.raw, width, height, fps, bitrate) } != 0 {
+            Ok(())
+        } else {
+            Err(CameraError::VideoModeFailed)
+        }
+    }
+
+    fn exit_video_mode(&mut self) {
+        if !self.raw.is_null() {
+            unsafe { fc2_exit_video_mode(self.raw) };
+        }
+    }
+
+    fn prepare_recording(&mut self) -> bool {
+        !self.raw.is_null() && unsafe { fc2_prepare_recording(self.raw) } != 0
+    }
+
+    fn release_recording(&mut self) {
+        if !self.raw.is_null() {
+            unsafe { fc2_release_recording(self.raw) };
+        }
+    }
+
+    fn start_recording(
+        &mut self,
+        path: &Path,
+        width: i32,
+        height: i32,
+        fps: i32,
+        bitrate: i32,
+    ) -> Result<(), CameraError> {
+        if self.raw.is_null() {
+            return Err(CameraError::NotOpen);
+        }
+        let path =
+            CString::new(path.as_os_str().as_bytes()).map_err(|_| CameraError::InvalidPath)?;
+        if unsafe { fc2_start_recording(self.raw, path.as_ptr(), width, height, fps, bitrate) } != 0
+        {
+            Ok(())
+        } else {
+            Err(CameraError::RecordingFailed)
+        }
+    }
+
+    fn stop_recording(&mut self) {
+        if !self.raw.is_null() {
+            unsafe { fc2_stop_recording(self.raw) };
+        }
+    }
+
+    fn is_recording(&self) -> bool {
+        !self.raw.is_null() && unsafe { fc2_is_recording(self.raw) } != 0
+    }
+
+    fn recording_write_failed(&self) -> bool {
+        !self.raw.is_null() && unsafe { fc2_recording_write_failed(self.raw) } != 0
     }
 }
 

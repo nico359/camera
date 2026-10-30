@@ -60,9 +60,33 @@ fn main() {
         .file(format!("{engine}/camera_c.cpp"))
         .file(format!("{engine}/hybris_loader.cpp"));
 
-    // AudioEncoder.cpp builds a stub when FURICAM_HAVE_AUDIO is not defined,
-    // which keeps GStreamer out of the build.  Recording is video-only for now.
+    // Enable AAC audio recording when the GStreamer development files are
+    // available.  The Flatpak SDK ships them; desktop builds without them fall
+    // back to the video-only AudioEncoder stub.
+    let gst = pkg_config::probe_library("gstreamer-1.0");
+    let gst_app = pkg_config::probe_library("gstreamer-app-1.0");
+    let mut audio_libs = Vec::new();
+    if let (Ok(gst), Ok(gst_app)) = (gst, gst_app) {
+        build.includes(gst.include_paths);
+        build.includes(gst_app.include_paths);
+        build.define("FURICAM_HAVE_AUDIO", None);
+        audio_libs.extend(gst.libs);
+        audio_libs.extend(gst_app.libs);
+        println!("cargo:warning=GStreamer found: audio recording enabled");
+    } else {
+        println!("cargo:warning=GStreamer dev files not found: video-only recording");
+    }
+
     build.compile("furicam_camera");
+
+    // The cc archive is linked after Cargo's native-lib list, so emit the
+    // GStreamer libs again here to satisfy the static engine's symbols
+    // (otherwise --as-needed drops them before it sees the archive).
+    audio_libs.sort();
+    audio_libs.dedup();
+    for lib in audio_libs {
+        println!("cargo:rustc-link-lib=dylib={lib}");
+    }
 
     println!("cargo:rustc-link-lib=EGL");
     println!("cargo:rustc-link-lib=pthread");

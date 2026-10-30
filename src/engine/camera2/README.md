@@ -25,6 +25,7 @@ without permission from the engine copyright holders.
 ## Keeping it in sync
 
 The copy has local modifications for the GTK frontend: `camera_c.{h,cpp}`
-expose asynchronous still-capture results, and `hybris_loader.cpp` is added.
-When the engine changes upstream, re-copy the files, re-apply those changes,
-and re-check the build flags in `build.rs`.
+expose asynchronous still-capture results, preview resizing, and video-mode /
+recording controls, and `hybris_loader.cpp` is added. When the engine changes
+upstream, re-copy the files, re-apply those changes, and re-check the build
+flags in `build.rs`.

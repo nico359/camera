@@ -58,6 +58,10 @@ void fc2_stop_preview(fc2_camera* c);
  * [0,0,view_w,view_h] rotated `rotation_deg`.  Returns 1 if a frame was drawn. */
 int  fc2_render_preview(fc2_camera* c, int view_w, int view_h, int rotation_deg);
 
+/* Recreate the preview reader at a new size.  Not allowed mid-recording.
+ * Returns 1 on success. */
+int  fc2_resize_preview(fc2_camera* c, int width, int height);
+
 /* Device tilt in degrees clockwise from natural portrait (0/90/180/270).
  * The session uses it to set the JPEG/video orientation tag; call it whenever
  * the device rotates, before capturing. */
@@ -82,6 +86,16 @@ void  fc2_set_focus_point(fc2_camera* c, float x, float y); /* normalized [0,1] 
 
 /* Capture / record.  Capture and recording finish asynchronously. */
 int  fc2_capture_photo(fc2_camera* c, const char* path);
+
+/* Simultaneous preview + record mode.  Enter it before recording so the
+ * viewfinder keeps running; exit it to release the encoder and return to a
+ * preview-only session.  Returns 1 on success. */
+int  fc2_enter_video_mode(fc2_camera* c, int width, int height, int fps, int bitrate);
+void fc2_exit_video_mode(fc2_camera* c);
+int  fc2_prepare_recording(fc2_camera* c);   /* warm the mic; 1 on success */
+void fc2_release_recording(fc2_camera* c);
+int  fc2_is_recording(fc2_camera* c);
+int  fc2_recording_write_failed(fc2_camera* c);
 
 /* Result of a still capture.  Called on a camera thread after the JPEG has
  * been written (or after the write failed).  `ok` is 1 on success. */

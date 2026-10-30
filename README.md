@@ -19,7 +19,11 @@ Implemented:
 - a last-shot thumbnail that opens the photo in the default viewer; an
   optional “Ask Which App to Open Photos” menu toggle enables the chooser
 - portrait-locked preview with its aspect ratio derived from the active
-  sensor orientation
+  sensor orientation; video mode switches the preview to 16:9
+- 1080p30 H.264 recording with a live viewfinder, record/stop button and timer;
+  AAC audio is included when the build finds GStreamer
+- video files are written to `~/Videos/Camera/VID_*.mp4`; the thumbnail opens
+  either photos or videos in the default viewer
 - device-rotation-aware still capture through iio-sensor-proxy
 - separate flip (front/back) and camera-picker buttons; the picker includes
   every enumerated camera, including the secondary back camera
@@ -28,9 +32,10 @@ Implemented:
 
 Not implemented yet:
 
-- video recording, audio, gallery, settings, grid/level, HDR, RAW, manual
-  controls.  The engine already exposes most of these through its C API; the UI
-  is the remaining work.
+- gallery, settings dialog, grid/level, HDR, RAW, manual controls.  The engine
+  already exposes most of these through its C API; the UI is the remaining
+  work.
+- switching cameras while in video mode (switch back to photo mode first).
 
 ## Building
 
@@ -88,6 +93,10 @@ meson setup build -Dcamera2=true
 
 `camera2` is only useful on Halium devices.  It compiles the vendored engine in
 `src/engine/camera2` and requires EGL headers in the build environment.
+
+Audio recording is enabled automatically when `pkg-config` finds
+`gstreamer-1.0` and `gstreamer-app-1.0`.  Without them the engine builds its
+video-only AAC stub and recording still works, just without sound.
 
 ## Licensing
 

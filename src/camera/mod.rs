@@ -46,6 +46,9 @@ pub enum CameraError {
     OpenFailed,
     PreviewFailed,
     CaptureFailed,
+    VideoModeFailed,
+    RecordingFailed,
+    Busy,
     InvalidPath,
     Gl(String),
 }
@@ -58,6 +61,9 @@ impl fmt::Display for CameraError {
             Self::OpenFailed => f.write_str("the camera could not be opened"),
             Self::PreviewFailed => f.write_str("the preview could not be started"),
             Self::CaptureFailed => f.write_str("the photo could not be captured"),
+            Self::VideoModeFailed => f.write_str("video mode could not be started"),
+            Self::RecordingFailed => f.write_str("the video could not be recorded"),
+            Self::Busy => f.write_str("stop recording or leave video mode first"),
             Self::InvalidPath => f.write_str("the destination path is not valid"),
             Self::Gl(message) => write!(f, "OpenGL error: {message}"),
         }
@@ -74,7 +80,29 @@ pub trait CameraBackend {
     fn start_preview(&mut self, width: i32, height: i32) -> Result<(), CameraError>;
     fn stop_preview(&mut self);
     fn render_preview(&mut self, width: i32, height: i32, rotation: i32) -> bool;
+    fn resize_preview(&mut self, width: i32, height: i32) -> Result<(), CameraError>;
     fn capture_photo(&mut self, path: &Path) -> Result<(), CameraError>;
+    fn enter_video_mode(
+        &mut self,
+        width: i32,
+        height: i32,
+        fps: i32,
+        bitrate: i32,
+    ) -> Result<(), CameraError>;
+    fn exit_video_mode(&mut self);
+    fn prepare_recording(&mut self) -> bool;
+    fn release_recording(&mut self);
+    fn start_recording(
+        &mut self,
+        path: &Path,
+        width: i32,
+        height: i32,
+        fps: i32,
+        bitrate: i32,
+    ) -> Result<(), CameraError>;
+    fn stop_recording(&mut self);
+    fn is_recording(&self) -> bool;
+    fn recording_write_failed(&self) -> bool;
     fn set_device_rotation(&mut self, degrees: i32);
     fn set_preview_mirror(&mut self, mirror: bool);
 }
@@ -248,11 +276,84 @@ impl CameraSession {
             .unwrap_or(0)
     }
 
+    pub fn resize_preview(&mut self, width: i32, height: i32) -> Result<(), CameraError> {
+        self.backend
+            .as_mut()
+            .ok_or(CameraError::NotOpen)?
+            .resize_preview(width, height)
+    }
+
     pub fn capture_photo(&mut self, path: &Path) -> Result<(), CameraError> {
         self.backend
             .as_mut()
             .ok_or(CameraError::NotOpen)?
             .capture_photo(path)
+    }
+
+    pub fn enter_video_mode(
+        &mut self,
+        width: i32,
+        height: i32,
+        fps: i32,
+        bitrate: i32,
+    ) -> Result<(), CameraError> {
+        self.backend
+            .as_mut()
+            .ok_or(CameraError::NotOpen)?
+            .enter_video_mode(width, height, fps, bitrate)
+    }
+
+    pub fn exit_video_mode(&mut self) {
+        if let Some(backend) = self.backend.as_mut() {
+            backend.exit_video_mode();
+        }
+    }
+
+    pub fn prepare_recording(&mut self) -> bool {
+        self.backend
+            .as_mut()
+            .map(|backend| backend.prepare_recording())
+            .unwrap_or(false)
+    }
+
+    pub fn release_recording(&mut self) {
+        if let Some(backend) = self.backend.as_mut() {
+            backend.release_recording();
+        }
+    }
+
+    pub fn start_recording(
+        &mut self,
+        path: &Path,
+        width: i32,
+        height: i32,
+        fps: i32,
+        bitrate: i32,
+    ) -> Result<(), CameraError> {
+        self.backend
+            .as_mut()
+            .ok_or(CameraError::NotOpen)?
+            .start_recording(path, width, height, fps, bitrate)
+    }
+
+    pub fn stop_recording(&mut self) {
+        if let Some(backend) = self.backend.as_mut() {
+            backend.stop_recording();
+        }
+    }
+
+    pub fn is_recording(&self) -> bool {
+        self.backend
+            .as_ref()
+            .map(|backend| backend.is_recording())
+            .unwrap_or(false)
+    }
+
+    pub fn recording_write_failed(&self) -> bool {
+        self.backend
+            .as_ref()
+            .map(|backend| backend.recording_write_failed())
+            .unwrap_or(false)
     }
 
     pub fn close(&mut self) {

@@ -60,6 +60,7 @@ dependencies = [
  "gettext-rs",
  "gtk4",
  "libadwaita",
+ "pkg-config",
 ]
 
 [[package]]

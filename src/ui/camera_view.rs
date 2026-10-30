@@ -20,6 +20,10 @@ use crate::device_rotation::DeviceRotation;
 
 const PREVIEW_WIDTH: i32 = 1280;
 const PREVIEW_HEIGHT: i32 = 960;
+const VIDEO_WIDTH: i32 = 1920;
+const VIDEO_HEIGHT: i32 = 1080;
+const VIDEO_FPS: i32 = 30;
+const VIDEO_BITRATE: i32 = 20_000_000;
 
 mod imp {
     use super::*;
@@ -44,6 +48,8 @@ mod imp {
 
         pub(super) photo_callback: RefCell<Option<Box<dyn Fn(&str, bool)>>>,
         render_timeout: RefCell<Option<glib::SourceId>>,
+        pub(super) video_mode: Cell<bool>,
+        pub(super) video_preview_16_9: Cell<bool>,
     }
 
     #[glib::object_subclass]
@@ -117,6 +123,8 @@ mod imp {
             self.session.borrow_mut().close();
             self.stop_rotation_tick();
             self.rotation_source.borrow_mut().take();
+            self.video_mode.set(false);
+            self.video_preview_16_9.set(false);
             obj.set_ready(false);
 
             self.parent_unrealize();
@@ -275,6 +283,9 @@ impl CameraView {
     where
         F: FnOnce(&mut CameraSession) -> Result<CameraInfo, CameraError>,
     {
+        if self.imp().video_mode.get() || self.imp().session.borrow().is_recording() {
+            return Err(CameraError::Busy);
+        }
         if !self.imp().session.borrow().is_open() {
             return Err(CameraError::NotOpen);
         }
@@ -304,10 +315,89 @@ impl CameraView {
         }
     }
 
+    pub fn set_video_mode(&self, enabled: bool) -> Result<(), CameraError> {
+        if enabled == self.imp().video_mode.get() {
+            return Ok(());
+        }
+        if self.imp().session.borrow().is_recording() {
+            return Err(CameraError::Busy);
+        }
+        if !self.imp().session.borrow().is_open() {
+            return Err(CameraError::NotOpen);
+        }
+
+        let mut session = self.imp().session.borrow_mut();
+        if enabled {
+            // A 16:9 preview matches the 1080p recording.  If the camera
+            // rejects that size, keep the 4:3 preview and record anyway.
+            let resized = session.resize_preview(VIDEO_WIDTH, VIDEO_HEIGHT).is_ok();
+            if let Err(error) =
+                session.enter_video_mode(VIDEO_WIDTH, VIDEO_HEIGHT, VIDEO_FPS, VIDEO_BITRATE)
+            {
+                if resized {
+                    let _ = session.resize_preview(PREVIEW_WIDTH, PREVIEW_HEIGHT);
+                }
+                self.imp().video_preview_16_9.set(false);
+                return Err(error);
+            }
+            // Warm the mic so the first clip does not lose its opening
+            // seconds to GStreamer/AudioCodec startup.
+            let _ = session.prepare_recording();
+            self.imp().video_preview_16_9.set(resized);
+            self.imp().video_mode.set(true);
+        } else {
+            session.exit_video_mode();
+            session.release_recording();
+            if session
+                .resize_preview(PREVIEW_WIDTH, PREVIEW_HEIGHT)
+                .is_ok()
+            {
+                self.imp().video_preview_16_9.set(false);
+            }
+            self.imp().video_mode.set(false);
+        }
+
+        Ok(())
+    }
+
+    pub fn video_mode(&self) -> bool {
+        self.imp().video_mode.get()
+    }
+
+    pub fn is_recording(&self) -> bool {
+        self.imp().session.borrow().is_recording()
+    }
+
+    pub fn start_recording(&self, path: &Path) -> Result<(), CameraError> {
+        if !self.imp().video_mode.get() || self.imp().session.borrow().is_recording() {
+            return Err(CameraError::Busy);
+        }
+        self.make_current();
+        let mut session = self.imp().session.borrow_mut();
+        session.start_recording(path, VIDEO_WIDTH, VIDEO_HEIGHT, VIDEO_FPS, VIDEO_BITRATE)?;
+        Ok(())
+    }
+
+    /// Stop recording and return whether the muxer reported a write failure.
+    pub fn stop_recording(&self) -> Result<bool, CameraError> {
+        if !self.imp().session.borrow().is_recording() {
+            return Err(CameraError::Busy);
+        }
+        let mut session = self.imp().session.borrow_mut();
+        session.stop_recording();
+        let write_failed = session.recording_write_failed();
+        Ok(write_failed)
+    }
+
     /// Aspect ratio of the preview area.  The preview is deliberately
     /// portrait-locked, so a 4:3 stream from a 90°/270°-mounted sensor is
-    /// shown as 3:4; a 0°/180° sensor stays 4:3.
+    /// shown as 3:4; a 16:9 video stream becomes 9:16.  A 0°/180° sensor
+    /// stays 4:3 in photo mode.
     pub fn preview_aspect(&self) -> f32 {
+        if self.imp().video_preview_16_9.get() {
+            return 9.0 / 16.0;
+        }
+
         let sensor = self
             .imp()
             .session

@@ -146,6 +146,11 @@ int fc2_render_preview(fc2_camera* c, int view_w, int view_h, int rotation_deg)
                               1.0f, 1.0f, c->mirror) ? 1 : 0;
 }
 
+int fc2_resize_preview(fc2_camera* c, int width, int height)
+{
+    return (c && c->session.resizePreviewReader(width, height)) ? 1 : 0;
+}
+
 void fc2_set_device_rotation(fc2_camera* c, int degrees)
 {
     if (c)
@@ -229,5 +234,22 @@ int fc2_start_recording(fc2_camera* c, const char* path, int width, int height, 
 }
 
 void fc2_stop_recording(fc2_camera* c) { if (c) c->session.stopRecording(); }
+
+int fc2_enter_video_mode(fc2_camera* c, int width, int height, int fps, int bitrate)
+{
+    return (c && c->session.enterVideoMode(width, height, fps, bitrate)) ? 1 : 0;
+}
+
+void fc2_exit_video_mode(fc2_camera* c) { if (c) c->session.exitVideoMode(); }
+int  fc2_prepare_recording(fc2_camera* c)
+{
+    return (c && c->session.prepareRecording()) ? 1 : 0;
+}
+void fc2_release_recording(fc2_camera* c) { if (c) c->session.releaseRecording(); }
+int  fc2_is_recording(fc2_camera* c) { return (c && c->session.isRecording()) ? 1 : 0; }
+int  fc2_recording_write_failed(fc2_camera* c)
+{
+    return (c && c->session.recordingWriteFailed()) ? 1 : 0;
+}
 
 } // extern "C"

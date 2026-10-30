@@ -4,7 +4,7 @@
 		<key name="open-with-dialog" type="b">
 			<default>false</default>
 			<summary>Ask which application to use</summary>
-			<description>Show the application chooser when opening the last photo. When disabled, the default photo viewer is used.</description>
+			<description>Show the application chooser when opening the last photo or video. When disabled, the default viewer is used.</description>
 		</key>
 	</schema>
 </schemalist>
