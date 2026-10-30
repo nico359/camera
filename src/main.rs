@@ -21,6 +21,7 @@
 mod application;
 mod camera;
 mod config;
+mod device_rotation;
 mod photo;
 mod ui;
 mod window;

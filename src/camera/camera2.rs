@@ -9,16 +9,32 @@ use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 use std::ptr;
 
-use super::{CameraBackend, CameraError, Facing};
+use super::{CameraBackend, CameraError, CameraInfo, Facing};
 
 #[repr(C)]
 struct fc2_camera {
     _private: [u8; 0],
 }
 
+#[repr(C)]
+#[derive(Copy, Clone)]
+struct fc2_camera_info {
+    id: [c_char; 64],
+    facing: c_int,
+    sensor_orientation: c_int,
+}
+
+const FC2_FACING_BACK: c_int = 1;
+
 extern "C" {
     fn fc2_available() -> c_int;
     fn fc2_open(facing: c_int) -> *mut fc2_camera;
+    fn fc2_list_open_cameras(
+        camera: *mut fc2_camera,
+        cameras: *mut fc2_camera_info,
+        max: c_int,
+    ) -> c_int;
+    fn fc2_open_id(id: *const c_char) -> *mut fc2_camera;
     fn fc2_close(camera: *mut fc2_camera);
     fn fc2_sensor_orientation(camera: *mut fc2_camera) -> c_int;
     fn fc2_start_preview(camera: *mut fc2_camera, width: c_int, height: c_int) -> c_int;
@@ -29,6 +45,8 @@ extern "C" {
         view_height: c_int,
         rotation_deg: c_int,
     ) -> c_int;
+    fn fc2_set_device_rotation(camera: *mut fc2_camera, degrees: c_int);
+    fn fc2_set_preview_mirror(camera: *mut fc2_camera, on: c_int);
     fn fc2_set_frame_callback(
         camera: *mut fc2_camera,
         callback: Option<extern "C" fn(*mut c_void)>,
@@ -39,6 +57,8 @@ extern "C" {
 
 pub struct Camera2Backend {
     raw: *mut fc2_camera,
+    device_rotation: i32,
+    mirror: bool,
 }
 
 impl Camera2Backend {
@@ -52,7 +72,50 @@ impl Camera2Backend {
 
         Ok(Self {
             raw: ptr::null_mut(),
+            device_rotation: 0,
+            mirror: false,
         })
+    }
+
+    fn read_cameras(&self) -> Vec<CameraInfo> {
+        if self.raw.is_null() {
+            return Vec::new();
+        }
+
+        const MAX_CAMERAS: usize = 8;
+        let mut infos: [fc2_camera_info; MAX_CAMERAS] = std::array::from_fn(|_| fc2_camera_info {
+            id: [0; 64],
+            facing: 0,
+            sensor_orientation: 0,
+        });
+
+        let count = unsafe {
+            fc2_list_open_cameras(self.raw, infos.as_mut_ptr(), MAX_CAMERAS as c_int)
+        };
+        infos[..count.max(0) as usize]
+            .iter()
+            .map(camera_info_from)
+            .collect()
+    }
+}
+
+fn camera_info_from(info: &fc2_camera_info) -> CameraInfo {
+    let bytes: Vec<u8> = info
+        .id
+        .iter()
+        .take_while(|&&c| c != 0)
+        .map(|&c| c as u8)
+        .collect();
+
+    CameraInfo {
+        id: String::from_utf8_lossy(&bytes).into_owned(),
+        facing: if info.facing == 0 {
+            Facing::Front
+        } else {
+            Facing::Back
+        },
+        sensor_orientation: info.sensor_orientation,
+        label: String::new(),
     }
 }
 
@@ -63,15 +126,44 @@ impl Camera2Backend {
 extern "C" fn noop_frame_callback(_user_data: *mut c_void) {}
 
 impl CameraBackend for Camera2Backend {
-    fn open(&mut self, facing: Facing) -> Result<(), CameraError> {
+    fn open_first(&mut self) -> Result<Vec<CameraInfo>, CameraError> {
         self.close();
 
-        let raw = unsafe { fc2_open(facing.fc2_value()) };
+        let raw = unsafe { fc2_open(FC2_FACING_BACK) };
         if raw.is_null() {
             return Err(CameraError::OpenFailed);
         }
 
-        unsafe { fc2_set_frame_callback(raw, Some(noop_frame_callback), ptr::null_mut()) };
+        self.raw = raw;
+        unsafe {
+            fc2_set_frame_callback(raw, Some(noop_frame_callback), ptr::null_mut());
+            fc2_set_device_rotation(raw, self.device_rotation);
+            fc2_set_preview_mirror(raw, self.mirror as c_int);
+        }
+
+        let cameras = self.read_cameras();
+        if cameras.is_empty() {
+            self.close();
+            return Err(CameraError::Unavailable);
+        }
+        Ok(cameras)
+    }
+
+    fn open(&mut self, id: &str) -> Result<(), CameraError> {
+        self.close();
+
+        let id = CString::new(id).map_err(|_| CameraError::OpenFailed)?;
+        let raw = unsafe { fc2_open_id(id.as_ptr()) };
+        if raw.is_null() {
+            return Err(CameraError::OpenFailed);
+        }
+
+        unsafe {
+            fc2_set_frame_callback(raw, Some(noop_frame_callback), ptr::null_mut());
+            fc2_set_device_rotation(raw, self.device_rotation);
+            fc2_set_preview_mirror(raw, self.mirror as c_int);
+        }
+
         self.raw = raw;
         Ok(())
     }
@@ -122,11 +214,26 @@ impl CameraBackend for Camera2Backend {
             return Err(CameraError::NotOpen);
         }
 
-        let path = CString::new(path.as_os_str().as_bytes()).map_err(|_| CameraError::InvalidPath)?;
+        let path =
+            CString::new(path.as_os_str().as_bytes()).map_err(|_| CameraError::InvalidPath)?;
         if unsafe { fc2_capture_photo(self.raw, path.as_ptr()) } != 0 {
             Ok(())
         } else {
             Err(CameraError::CaptureFailed)
+        }
+    }
+
+    fn set_device_rotation(&mut self, degrees: i32) {
+        self.device_rotation = degrees;
+        if !self.raw.is_null() {
+            unsafe { fc2_set_device_rotation(self.raw, degrees) };
+        }
+    }
+
+    fn set_preview_mirror(&mut self, mirror: bool) {
+        self.mirror = mirror;
+        if !self.raw.is_null() {
+            unsafe { fc2_set_preview_mirror(self.raw, mirror as c_int) };
         }
     }
 }
