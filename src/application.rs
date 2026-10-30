@@ -18,9 +18,9 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
-use gettextrs::gettext;
 use adw::prelude::*;
 use adw::subclass::prelude::*;
+use gettextrs::gettext;
 use gtk::{gio, glib};
 
 use crate::config::VERSION;
@@ -49,6 +49,20 @@ mod imp {
     }
 
     impl ApplicationImpl for CameraApplication {
+        fn startup(&self) {
+            self.parent_startup();
+
+            let provider = gtk::CssProvider::new();
+            provider.load_from_resource("/io/github/nico359/camera/style.css");
+            if let Some(display) = gtk::gdk::Display::default() {
+                gtk::style_context_add_provider_for_display(
+                    &display,
+                    &provider,
+                    gtk::STYLE_PROVIDER_PRIORITY_APPLICATION,
+                );
+            }
+        }
+
         // We connect to the activate callback to create a window when the application
         // has been launched. Additionally, this callback notifies us when the user
         // tries to launch a "second instance" of the application. When they try
@@ -103,9 +117,7 @@ impl CameraApplication {
             .developer_name("nico359")
             .version(VERSION)
             .license_type(gtk::License::Gpl20)
-            .comments(&gettext(
-                "A camera app powered by FuriCam's Camera2 engine",
-            ))
+            .comments(&gettext("A camera app powered by FuriCam's Camera2 engine"))
             .website("https://github.com/nico359/camera")
             .developers(vec!["nico359", "Sean Pollard"])
             // Translators: Replace "translator-credits" with your name/username, and optionally an email or URL.
