@@ -8,11 +8,14 @@
     ],
     "command" : "camera",
     "finish-args" : [
-        "--share=network",
         "--share=ipc",
         "--socket=fallback-x11",
-        "--device=dri",
-        "--socket=wayland"
+        "--socket=wayland",
+        "--socket=pulseaudio",
+        "--device=all",
+        "--filesystem=xdg-pictures/Camera:create",
+        "--filesystem=xdg-videos/Camera:create",
+        "--env=HYBRIS_LD_LIBRARY_PATH=/system/lib64:/vendor/lib64:/odm/lib64"
     ],
     "build-options" : {
         "append-path" : "/usr/lib/sdk/rust-stable/bin",
@@ -40,10 +43,19 @@
             "name" : "camera",
             "builddir" : true,
             "buildsystem" : "meson",
+            "config-opts" : [
+                "-Dbuildtype=release",
+                "-Dcamera2=true"
+            ],
             "sources" : [
                 {
-                    "type" : "git",
-                    "url" : "."
+                    "type" : "dir",
+                    "path" : ".",
+                    "skip" : [
+                        ".git",
+                        "builddir",
+                        "_build"
+                    ]
                 }
             ]
         }
