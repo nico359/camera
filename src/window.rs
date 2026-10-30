@@ -300,17 +300,16 @@ impl CameraWindow {
             action.set_enabled(ready);
         }
         if let Some(action) = imp.switch_action.borrow().as_ref() {
-            action.set_enabled(ready && !video && !recording);
+            action.set_enabled(ready && !recording);
         }
         if let Some(action) = imp.select_action.borrow().as_ref() {
-            action.set_enabled(ready && !video && !recording);
+            action.set_enabled(ready && !recording);
         }
         if let Some(action) = imp.video_mode_action.borrow().as_ref() {
             action.set_enabled(ready && !recording);
         }
 
-        imp.camera_menu_button
-            .set_sensitive(ready && !video && !recording);
+        imp.camera_menu_button.set_sensitive(ready && !recording);
         imp.preview_frame.set_ratio(view.preview_aspect());
 
         if video {
@@ -457,31 +456,47 @@ impl CameraWindow {
     }
 
     fn flip_camera(&self) {
+        let was_video = self.imp().camera_view.get().video_mode();
         match self.imp().camera_view.flip_camera() {
             Ok(info) => {
                 self.update_camera_menu();
                 let view = self.imp().camera_view.get();
                 self.imp().preview_frame.set_ratio(view.preview_aspect());
-                self.show_short_toast(&info.label);
+                if was_video && !view.video_mode() {
+                    self.show_toast(&gettext(
+                        "This camera does not support video; using photo mode",
+                    ));
+                } else {
+                    self.show_short_toast(&info.label);
+                }
             }
             Err(error) => {
                 self.show_toast(&format!("{}: {error}", gettext("Could not switch camera")))
             }
         }
+        self.update_mode_ui();
     }
 
     fn select_camera(&self, index: usize) {
+        let was_video = self.imp().camera_view.get().video_mode();
         match self.imp().camera_view.select_camera(index) {
             Ok(info) => {
                 self.update_camera_menu();
                 let view = self.imp().camera_view.get();
                 self.imp().preview_frame.set_ratio(view.preview_aspect());
-                self.show_short_toast(&info.label);
+                if was_video && !view.video_mode() {
+                    self.show_toast(&gettext(
+                        "This camera does not support video; using photo mode",
+                    ));
+                } else {
+                    self.show_short_toast(&info.label);
+                }
             }
             Err(error) => {
                 self.show_toast(&format!("{}: {error}", gettext("Could not switch camera")))
             }
         }
+        self.update_mode_ui();
     }
 
     fn update_camera_menu(&self) {

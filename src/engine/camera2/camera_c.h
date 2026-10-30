@@ -50,17 +50,16 @@ void        fc2_close(fc2_camera* c);
 /* Sensor mount orientation in degrees — the frontend uses it to rotate preview. */
 int fc2_sensor_orientation(fc2_camera* c);
 
-/* Preview (PRIVATE/GPU buffers for the zero-copy GL path).  1 on success. */
+/* Preview (PRIVATE/GPU buffers for the zero-copy GL path).  1 on success.
+ * `fc2_start_preview_with_still` can omit the full-resolution JPEG stream,
+ * which is not needed while recording and can cap the capture rate. */
 int  fc2_start_preview(fc2_camera* c, int width, int height);
+int  fc2_start_preview_with_still(fc2_camera* c, int width, int height, int with_still);
 void fc2_stop_preview(fc2_camera* c);
 
 /* Draw the latest preview frame into the CURRENT GL context, filling
  * [0,0,view_w,view_h] rotated `rotation_deg`.  Returns 1 if a frame was drawn. */
 int  fc2_render_preview(fc2_camera* c, int view_w, int view_h, int rotation_deg);
-
-/* Recreate the preview reader at a new size.  Not allowed mid-recording.
- * Returns 1 on success. */
-int  fc2_resize_preview(fc2_camera* c, int width, int height);
 
 /* Device tilt in degrees clockwise from natural portrait (0/90/180/270).
  * The session uses it to set the JPEG/video orientation tag; call it whenever

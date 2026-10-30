@@ -129,10 +129,16 @@ int fc2_sensor_orientation(fc2_camera* c) { return c ? c->sensorOrientation : 0;
 
 int fc2_start_preview(fc2_camera* c, int width, int height)
 {
+    return fc2_start_preview_with_still(c, width, height, 1);
+}
+
+int fc2_start_preview_with_still(fc2_camera* c, int width, int height, int with_still)
+{
     if (!c)
         return 0;
     return c->session.startPreview(width, height, AIMAGE_FORMAT_PRIVATE,
-                                   AHARDWAREBUFFER_USAGE_GPU_SAMPLED_IMAGE, 30, true)
+                                   AHARDWAREBUFFER_USAGE_GPU_SAMPLED_IMAGE, 30,
+                                   with_still != 0)
                ? 1 : 0;
 }
 
@@ -144,11 +150,6 @@ int fc2_render_preview(fc2_camera* c, int view_w, int view_h, int rotation_deg)
         return 0;
     return c->renderer.render(c->session.previewReader(), view_w, view_h, rotation_deg,
                               1.0f, 1.0f, c->mirror) ? 1 : 0;
-}
-
-int fc2_resize_preview(fc2_camera* c, int width, int height)
-{
-    return (c && c->session.resizePreviewReader(width, height)) ? 1 : 0;
 }
 
 void fc2_set_device_rotation(fc2_camera* c, int degrees)

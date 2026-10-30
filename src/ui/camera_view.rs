@@ -22,6 +22,8 @@ const PREVIEW_WIDTH: i32 = 1280;
 const PREVIEW_HEIGHT: i32 = 960;
 const VIDEO_WIDTH: i32 = 1920;
 const VIDEO_HEIGHT: i32 = 1080;
+const VIDEO_PREVIEW_WIDTH: i32 = 1280;
+const VIDEO_PREVIEW_HEIGHT: i32 = 720;
 const VIDEO_FPS: i32 = 30;
 const VIDEO_BITRATE: i32 = 20_000_000;
 
@@ -94,7 +96,7 @@ mod imp {
                 let mut session = self.session.borrow_mut();
                 session
                     .open_first()
-                    .and_then(|()| session.start_preview(PREVIEW_WIDTH, PREVIEW_HEIGHT))
+                    .and_then(|()| session.start_preview(PREVIEW_WIDTH, PREVIEW_HEIGHT, true))
             };
 
             match result {
@@ -283,21 +285,50 @@ impl CameraView {
     where
         F: FnOnce(&mut CameraSession) -> Result<CameraInfo, CameraError>,
     {
-        if self.imp().video_mode.get() || self.imp().session.borrow().is_recording() {
+        if self.imp().session.borrow().is_recording() {
             return Err(CameraError::Busy);
         }
         if !self.imp().session.borrow().is_open() {
             return Err(CameraError::NotOpen);
         }
 
+        let was_video = self.imp().video_mode.get();
         self.make_current();
 
         let result = {
             let mut session = self.imp().session.borrow_mut();
+            if was_video {
+                session.exit_video_mode();
+                session.release_recording();
+            }
+
             change(&mut session).and_then(|info| {
-                session
-                    .start_preview(PREVIEW_WIDTH, PREVIEW_HEIGHT)
-                    .map(|()| info)
+                if was_video {
+                    match Self::start_video_preview(&mut session) {
+                        Ok(sixteen) => {
+                            self.imp().video_preview_16_9.set(sixteen);
+                            self.imp().video_mode.set(true);
+                            Ok(info)
+                        }
+                        Err(error) => {
+                            // The new camera may not support video mode.  Keep
+                            // it usable in photo mode instead of declaring the
+                            // whole camera unavailable.
+                            let restored = Self::restore_photo_preview(&mut session).is_ok();
+                            self.imp().video_mode.set(false);
+                            self.imp().video_preview_16_9.set(false);
+                            if restored {
+                                Ok(info)
+                            } else {
+                                Err(error)
+                            }
+                        }
+                    }
+                } else {
+                    session
+                        .start_preview(PREVIEW_WIDTH, PREVIEW_HEIGHT, true)
+                        .map(|()| info)
+                }
             })
         };
 
@@ -308,6 +339,10 @@ impl CameraView {
                 Ok(info)
             }
             Err(error) => {
+                if was_video {
+                    self.imp().video_mode.set(false);
+                    self.imp().video_preview_16_9.set(false);
+                }
                 self.set_status(format!("Camera unavailable: {error}"));
                 self.set_ready(false);
                 Err(error)
@@ -328,36 +363,54 @@ impl CameraView {
 
         let mut session = self.imp().session.borrow_mut();
         if enabled {
-            // A 16:9 preview matches the 1080p recording.  If the camera
-            // rejects that size, keep the 4:3 preview and record anyway.
-            let resized = session.resize_preview(VIDEO_WIDTH, VIDEO_HEIGHT).is_ok();
-            if let Err(error) =
-                session.enter_video_mode(VIDEO_WIDTH, VIDEO_HEIGHT, VIDEO_FPS, VIDEO_BITRATE)
-            {
-                if resized {
-                    let _ = session.resize_preview(PREVIEW_WIDTH, PREVIEW_HEIGHT);
-                }
-                self.imp().video_preview_16_9.set(false);
-                return Err(error);
-            }
-            // Warm the mic so the first clip does not lose its opening
-            // seconds to GStreamer/AudioCodec startup.
-            let _ = session.prepare_recording();
-            self.imp().video_preview_16_9.set(resized);
+            let sixteen = Self::start_video_preview(&mut session)?;
+            self.imp().video_preview_16_9.set(sixteen);
             self.imp().video_mode.set(true);
         } else {
             session.exit_video_mode();
             session.release_recording();
-            if session
-                .resize_preview(PREVIEW_WIDTH, PREVIEW_HEIGHT)
-                .is_ok()
-            {
-                self.imp().video_preview_16_9.set(false);
-            }
+            let restored = Self::restore_photo_preview(&mut session).is_ok();
+            self.imp().video_preview_16_9.set(!restored);
             self.imp().video_mode.set(false);
+            if !restored {
+                return Err(CameraError::PreviewFailed);
+            }
         }
 
         Ok(())
+    }
+
+    fn start_video_preview(session: &mut CameraSession) -> Result<bool, CameraError> {
+        // Video mode does not need the full-resolution JPEG output.  Start a
+        // still-capture-free 16:9 preview; that removes one heavy stream and
+        // lets the HAL deliver frames at the requested rate.
+        let sixteen = session
+            .start_preview(VIDEO_PREVIEW_WIDTH, VIDEO_PREVIEW_HEIGHT, false)
+            .is_ok();
+        if !sixteen
+            && session
+                .start_preview(PREVIEW_WIDTH, PREVIEW_HEIGHT, false)
+                .is_err()
+        {
+            let _ = Self::restore_photo_preview(session);
+            return Err(CameraError::PreviewFailed);
+        }
+
+        if let Err(error) =
+            session.enter_video_mode(VIDEO_WIDTH, VIDEO_HEIGHT, VIDEO_FPS, VIDEO_BITRATE)
+        {
+            let _ = Self::restore_photo_preview(session);
+            return Err(error);
+        }
+
+        // Warm the mic so the first clip does not lose its opening seconds to
+        // GStreamer/AudioCodec startup.
+        let _ = session.prepare_recording();
+        Ok(sixteen)
+    }
+
+    fn restore_photo_preview(session: &mut CameraSession) -> Result<(), CameraError> {
+        session.start_preview(PREVIEW_WIDTH, PREVIEW_HEIGHT, true)
     }
 
     pub fn video_mode(&self) -> bool {

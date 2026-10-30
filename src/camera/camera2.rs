@@ -37,7 +37,12 @@ extern "C" {
     fn fc2_open_id(id: *const c_char) -> *mut fc2_camera;
     fn fc2_close(camera: *mut fc2_camera);
     fn fc2_sensor_orientation(camera: *mut fc2_camera) -> c_int;
-    fn fc2_start_preview(camera: *mut fc2_camera, width: c_int, height: c_int) -> c_int;
+    fn fc2_start_preview_with_still(
+        camera: *mut fc2_camera,
+        width: c_int,
+        height: c_int,
+        with_still: c_int,
+    ) -> c_int;
     fn fc2_stop_preview(camera: *mut fc2_camera);
     fn fc2_render_preview(
         camera: *mut fc2_camera,
@@ -47,7 +52,6 @@ extern "C" {
     ) -> c_int;
     fn fc2_set_device_rotation(camera: *mut fc2_camera, degrees: c_int);
     fn fc2_set_preview_mirror(camera: *mut fc2_camera, on: c_int);
-    fn fc2_resize_preview(camera: *mut fc2_camera, width: c_int, height: c_int) -> c_int;
     fn fc2_set_frame_callback(
         camera: *mut fc2_camera,
         callback: Option<extern "C" fn(*mut c_void)>,
@@ -247,12 +251,19 @@ impl CameraBackend for Camera2Backend {
         }
     }
 
-    fn start_preview(&mut self, width: i32, height: i32) -> Result<(), CameraError> {
+    fn start_preview(
+        &mut self,
+        width: i32,
+        height: i32,
+        with_still: bool,
+    ) -> Result<(), CameraError> {
         if self.raw.is_null() {
             return Err(CameraError::NotOpen);
         }
 
-        if unsafe { fc2_start_preview(self.raw, width, height) } != 0 {
+        if unsafe { fc2_start_preview_with_still(self.raw, width, height, with_still as c_int) }
+            != 0
+        {
             Ok(())
         } else {
             Err(CameraError::PreviewFailed)
@@ -298,17 +309,6 @@ impl CameraBackend for Camera2Backend {
         self.mirror = mirror;
         if !self.raw.is_null() {
             unsafe { fc2_set_preview_mirror(self.raw, mirror as c_int) };
-        }
-    }
-
-    fn resize_preview(&mut self, width: i32, height: i32) -> Result<(), CameraError> {
-        if self.raw.is_null() {
-            return Err(CameraError::NotOpen);
-        }
-        if unsafe { fc2_resize_preview(self.raw, width, height) } != 0 {
-            Ok(())
-        } else {
-            Err(CameraError::PreviewFailed)
         }
     }
 

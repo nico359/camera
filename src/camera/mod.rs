@@ -77,10 +77,14 @@ pub trait CameraBackend {
     fn open(&mut self, id: &str) -> Result<(), CameraError>;
     fn close(&mut self);
     fn sensor_orientation(&self) -> i32;
-    fn start_preview(&mut self, width: i32, height: i32) -> Result<(), CameraError>;
+    fn start_preview(
+        &mut self,
+        width: i32,
+        height: i32,
+        with_still: bool,
+    ) -> Result<(), CameraError>;
     fn stop_preview(&mut self);
     fn render_preview(&mut self, width: i32, height: i32, rotation: i32) -> bool;
-    fn resize_preview(&mut self, width: i32, height: i32) -> Result<(), CameraError>;
     fn capture_photo(&mut self, path: &Path) -> Result<(), CameraError>;
     fn enter_video_mode(
         &mut self,
@@ -255,11 +259,16 @@ impl CameraSession {
         }
     }
 
-    pub fn start_preview(&mut self, width: i32, height: i32) -> Result<(), CameraError> {
+    pub fn start_preview(
+        &mut self,
+        width: i32,
+        height: i32,
+        with_still: bool,
+    ) -> Result<(), CameraError> {
         self.backend
             .as_mut()
             .ok_or(CameraError::NotOpen)?
-            .start_preview(width, height)
+            .start_preview(width, height, with_still)
     }
 
     pub fn render_preview(&mut self, width: i32, height: i32, rotation: i32) -> bool {
@@ -274,13 +283,6 @@ impl CameraSession {
             .as_ref()
             .map(|backend| backend.sensor_orientation())
             .unwrap_or(0)
-    }
-
-    pub fn resize_preview(&mut self, width: i32, height: i32) -> Result<(), CameraError> {
-        self.backend
-            .as_mut()
-            .ok_or(CameraError::NotOpen)?
-            .resize_preview(width, height)
     }
 
     pub fn capture_photo(&mut self, path: &Path) -> Result<(), CameraError> {
