@@ -10,6 +10,9 @@
       <object class="AdwToolbarView">
         <child type="top">
           <object class="AdwHeaderBar">
+            <style>
+              <class name="camera-header"/>
+            </style>
             <child type="start">
               <object class="GtkMenuButton" id="camera_menu_button">
                 <property name="icon-name">view-grid-symbolic</property>
@@ -28,12 +31,20 @@
           </object>
         </child>
         <property name="content">
-          <object class="AdwToastOverlay" id="toast_overlay">
-            <property name="child">
-              <object class="GtkOverlay">
-                <style>
-                  <class name="camera-background"/>
-                </style>
+          <object class="GtkBox">
+            <style>
+              <class name="camera-background"/>
+            </style>
+            <property name="orientation">vertical</property>
+            <property name="vexpand">True</property>
+            <child>
+              <object class="AdwToastOverlay" id="toast_overlay">
+                <property name="vexpand">True</property>
+                <property name="child">
+                  <object class="GtkOverlay">
+                    <style>
+                      <class name="camera-background"/>
+                    </style>
                 <property name="child">
                   <object class="GtkAspectFrame" id="preview_frame">
                     <property name="ratio">0.75</property>
@@ -79,12 +90,17 @@
                     </style>
                   </object>
                 </child>
-                <child type="overlay">
-                  <object class="GtkCenterBox">
+                  </object>
+                </property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkCenterBox">
                     <property name="halign">fill</property>
                     <property name="valign">end</property>
                     <property name="margin-start">24</property>
                     <property name="margin-end">24</property>
+                    <property name="margin-top">12</property>
                     <property name="margin-bottom">28</property>
                     <child type="start">
                       <object class="GtkBox">
@@ -199,9 +215,7 @@
                       </object>
                     </child>
                   </object>
-                </child>
-              </object>
-            </property>
+            </child>
           </object>
         </property>
       </object>

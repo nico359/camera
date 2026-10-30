@@ -106,6 +106,7 @@ mod imp {
     impl ObjectImpl for CameraWindow {
         fn constructed(&self) {
             self.parent_constructed();
+            self.obj().add_css_class("camera-window");
             self.setup_actions();
             self.setup_status();
             self.obj().load_latest_media();

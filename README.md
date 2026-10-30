@@ -19,8 +19,9 @@ Implemented:
   written, not when the request is submitted
 - a last-shot thumbnail that opens the photo in the default viewer; an
   optional “Ask Which App to Open Photos” menu toggle enables the chooser
-- black preview canvas (the letterbox area matches GNOME Snapshot rather than
-  the Adwaita window background)
+- black preview canvas and header bar; the preview sits above a dedicated
+  control bar, so it is centered between the header and the shutter row rather
+  than behind the controls
 - portrait-locked preview with its aspect ratio derived from the active
   sensor orientation; video mode switches the preview to 16:9
 - 1080p H.264 recording with a live viewfinder, record/stop button and timer;
