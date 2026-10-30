@@ -16,13 +16,13 @@ Implemented:
   JPEG stream; on the FuriPhone this is 5152×3864)
 - asynchronous capture feedback: the UI reports when the JPEG is actually
   written, not when the request is submitted
-- a last-shot thumbnail with an in-app review dialog and a hand-off to the
-  system image viewer
-- adaptive controls: the shutter row moves to the right edge in landscape
-  while the preview itself stays portrait-locked
+- a last-shot thumbnail that opens the photo in the default viewer; an
+  optional “Ask Which App to Open Photos” menu toggle enables the chooser
+- portrait-locked preview with its aspect ratio derived from the active
+  sensor orientation
 - device-rotation-aware still capture through iio-sensor-proxy
-- camera cycling through every enumerated camera, including the secondary
-  back camera
+- separate flip (front/back) and camera-picker buttons; the picker includes
+  every enumerated camera, including the secondary back camera
 - front-camera preview mirroring
 - a Flatpak manifest with the permissions the Halium camera stack needs
 
@@ -68,6 +68,11 @@ Requirements:
   not find the camera HAL.
 - The Flatpak is self-hosted on purpose.  `--device=all` and the Halium paths
   make it unsuitable for Flathub.
+- The manifest also asks for `--talk-name=org.freedesktop.Flatpak`.  The
+  OpenURI portal always shows an app chooser for local files, so the thumbnail
+  needs a narrow `flatpak-spawn --host gio open` path to honor “open in the
+  default viewer”.  The “Ask Which App to Open Photos” menu toggle switches
+  back to the portal chooser.
 
 The camera engine links `libhybris` at runtime through the
 `org.freedesktop.Platform.GL.hybris` extension; it does not copy host libraries
@@ -90,3 +95,8 @@ The application is GPL-3.0-or-later.  The vendored FuriCam Camera2 engine is
 GPL-2.0-only; see `src/engine/camera2/README.md`.  Those two licenses are not
 compatible without the copyright holders' permission, so this vendored copy is
 for local development until the licensing question is resolved.
+
+The simplest compatible fix is to relicense the application itself to
+GPL-2.0-or-later, which the app copyright holder can do, or to obtain
+permission from the Camera2 engine contributors to use GPL-2.0-or-later there.
+This is not legal advice.

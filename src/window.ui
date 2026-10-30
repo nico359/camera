@@ -11,10 +11,22 @@
         <child type="top">
           <object class="AdwHeaderBar">
             <child type="start">
-              <object class="GtkButton" id="switch_button">
-                <property name="action-name">win.switch-camera</property>
-                <property name="icon-name">camera-switch-symbolic</property>
-                <property name="tooltip-text" translatable="yes">Switch Camera</property>
+              <object class="GtkBox">
+                <property name="spacing">6</property>
+                <child>
+                  <object class="GtkButton" id="switch_button">
+                    <property name="action-name">win.switch-camera</property>
+                    <property name="icon-name">camera-switch-symbolic</property>
+                    <property name="tooltip-text" translatable="yes">Flip Camera</property>
+                  </object>
+                </child>
+                <child>
+                  <object class="GtkMenuButton" id="camera_menu_button">
+                    <property name="icon-name">view-grid-symbolic</property>
+                    <property name="tooltip-text" translatable="yes">Choose Camera</property>
+                    <property name="sensitive">False</property>
+                  </object>
+                </child>
               </object>
             </child>
             <child type="end">
@@ -64,7 +76,7 @@
                   </object>
                 </child>
                 <child type="overlay">
-                  <object class="GtkCenterBox" id="controls">
+                  <object class="GtkCenterBox">
                     <property name="halign">fill</property>
                     <property name="valign">end</property>
                     <property name="margin-start">24</property>
@@ -132,6 +144,12 @@
     </property>
   </template>
   <menu id="primary_menu">
+    <section>
+      <item>
+        <attribute name="label" translatable="yes">_Ask Which App to Open Photos</attribute>
+        <attribute name="action">win.ask-open-with</attribute>
+      </item>
+    </section>
     <section>
       <item>
         <attribute name="label" translatable="yes">_About Camera</attribute>

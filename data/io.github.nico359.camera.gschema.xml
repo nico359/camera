@@ -1,5 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <schemalist gettext-domain="camera">
 	<schema id="io.github.nico359.camera" path="/io/github/nico359/camera/">
+		<key name="open-with-dialog" type="b">
+			<default>false</default>
+			<summary>Ask which application to use</summary>
+			<description>Show the application chooser when opening the last photo. When disabled, the default photo viewer is used.</description>
+		</key>
 	</schema>
 </schemalist>

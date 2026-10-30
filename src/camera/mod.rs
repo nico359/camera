@@ -133,6 +133,14 @@ impl CameraSession {
         self.cameras.get(self.current)
     }
 
+    pub fn current_index(&self) -> Option<usize> {
+        self.current().map(|_| self.current)
+    }
+
+    pub fn cameras(&self) -> &[CameraInfo] {
+        &self.cameras
+    }
+
     pub fn is_open(&self) -> bool {
         self.backend.is_some()
     }
@@ -174,21 +182,36 @@ impl CameraSession {
         Ok(())
     }
 
-    /// Cycle to the next enumerated camera (back, front, back 2, …).
-    pub fn switch(&mut self) -> Result<CameraInfo, CameraError> {
-        if self.cameras.is_empty() {
-            return Err(CameraError::NotOpen);
-        }
+    /// Flip between the main back and front cameras.  The secondary back
+    /// camera is intentionally skipped; use `select` for that.
+    pub fn flip(&mut self) -> Result<CameraInfo, CameraError> {
+        let facing = self
+            .current()
+            .map(|camera| camera.facing)
+            .ok_or(CameraError::NotOpen)?;
+        let target = self
+            .cameras
+            .iter()
+            .position(|camera| camera.facing != facing)
+            .ok_or(CameraError::NotOpen)?;
+        self.select(target)
+    }
 
-        let next = (self.current + 1) % self.cameras.len();
+    /// Open a camera by its index in `cameras()`.
+    pub fn select(&mut self, index: usize) -> Result<CameraInfo, CameraError> {
+        let info = self
+            .cameras
+            .get(index)
+            .cloned()
+            .ok_or(CameraError::NotOpen)?;
         {
             let backend = self.backend.as_mut().ok_or(CameraError::NotOpen)?;
-            backend.open(&self.cameras[next].id)?;
+            backend.open(&info.id)?;
         }
 
-        self.current = next;
+        self.current = index;
         self.apply_controls();
-        Ok(self.cameras[next].clone())
+        Ok(info)
     }
 
     fn apply_controls(&mut self) {

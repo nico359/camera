@@ -41,7 +41,7 @@ mod imp {
         pub preview_frame: TemplateChild<gtk::AspectFrame>,
 
         #[template_child]
-        pub controls: TemplateChild<gtk::CenterBox>,
+        pub camera_menu_button: TemplateChild<gtk::MenuButton>,
 
         #[template_child]
         pub last_photo_button: TemplateChild<gtk::Button>,
@@ -58,6 +58,7 @@ mod imp {
         pub(super) last_photo_path: RefCell<Option<PathBuf>>,
         capture_action: RefCell<Option<gio::SimpleAction>>,
         switch_action: RefCell<Option<gio::SimpleAction>>,
+        select_action: RefCell<Option<gio::SimpleAction>>,
         pub(super) last_photo_action: RefCell<Option<gio::SimpleAction>>,
     }
 
@@ -81,8 +82,6 @@ mod imp {
             self.parent_constructed();
             self.setup_actions();
             self.setup_status();
-            self.setup_layout();
-            self.obj().update_layout();
             self.obj().load_latest_photo();
         }
     }
@@ -111,20 +110,58 @@ mod imp {
             let weak = window.downgrade();
             switch.connect_activate(move |_, _| {
                 if let Some(window) = weak.upgrade() {
-                    window.switch_camera();
+                    window.flip_camera();
                 }
             });
             window.add_action(&switch);
+
+            let select = gio::SimpleAction::new("select-camera", Some(glib::VariantTy::INT32));
+            select.set_enabled(false);
+            let weak = window.downgrade();
+            select.connect_activate(move |_, parameter| {
+                let Some(index) = parameter.and_then(|value| value.get::<i32>()) else {
+                    return;
+                };
+                if let Some(window) = weak.upgrade() {
+                    window.select_camera(index.max(0) as usize);
+                }
+            });
+            window.add_action(&select);
 
             let last_photo = gio::SimpleAction::new("open-last-photo", None);
             last_photo.set_enabled(false);
             let weak = window.downgrade();
             last_photo.connect_activate(move |_, _| {
                 if let Some(window) = weak.upgrade() {
-                    window.show_last_photo();
+                    window.open_last_photo();
                 }
             });
             window.add_action(&last_photo);
+
+            let settings = gio::Settings::new("io.github.nico359.camera");
+            let ask_open_with = gio::SimpleAction::new_stateful(
+                "ask-open-with",
+                None,
+                &settings.boolean("open-with-dialog").to_variant(),
+            );
+            let settings = settings.clone();
+            let weak = window.downgrade();
+            ask_open_with.connect_change_state(move |action, value| {
+                let Some(value) = value.and_then(|value| value.get::<bool>()) else {
+                    return;
+                };
+                let _ = settings.set_boolean("open-with-dialog", value);
+                action.set_state(&value.to_variant());
+                if let Some(window) = weak.upgrade() {
+                    let message = if value {
+                        gettext("Photos will open with an app chooser")
+                    } else {
+                        gettext("Photos will open in the default viewer")
+                    };
+                    window.show_toast(&message);
+                }
+            });
+            window.add_action(&ask_open_with);
 
             if let Some(application) = window.application() {
                 application.set_accels_for_action("win.capture", &["space"]);
@@ -133,6 +170,7 @@ mod imp {
 
             *self.capture_action.borrow_mut() = Some(capture);
             *self.switch_action.borrow_mut() = Some(switch);
+            *self.select_action.borrow_mut() = Some(select);
             *self.last_photo_action.borrow_mut() = Some(last_photo);
         }
 
@@ -141,8 +179,10 @@ mod imp {
 
             let label = self.status_label.get();
             let frame = self.preview_frame.get();
+            let menu_button = self.camera_menu_button.get();
             let capture = self.capture_action.borrow().clone();
             let switch = self.switch_action.borrow().clone();
+            let select = self.select_action.borrow().clone();
 
             view.connect_notify_local(Some("ready"), move |view, _| {
                 let ready = view.ready();
@@ -153,6 +193,10 @@ mod imp {
                 if let Some(action) = switch.as_ref() {
                     action.set_enabled(ready);
                 }
+                if let Some(action) = select.as_ref() {
+                    action.set_enabled(ready);
+                }
+                menu_button.set_sensitive(ready);
 
                 if ready {
                     frame.set_ratio(view.preview_aspect());
@@ -175,12 +219,6 @@ mod imp {
                     window.on_photo_result(path, ok);
                 }
             });
-        }
-
-        fn setup_layout(&self) {
-            let window = self.obj();
-            window.connect_notify_local(Some("width"), |window, _| window.update_layout());
-            window.connect_notify_local(Some("height"), |window, _| window.update_layout());
         }
     }
 }
@@ -218,9 +256,10 @@ impl CameraWindow {
         }
     }
 
-    fn switch_camera(&self) {
-        match self.imp().camera_view.switch_camera() {
+    fn flip_camera(&self) {
+        match self.imp().camera_view.flip_camera() {
             Ok(info) => {
+                self.update_camera_menu();
                 let view = self.imp().camera_view.get();
                 self.imp().preview_frame.set_ratio(view.preview_aspect());
                 self.show_toast(&info.label);
@@ -229,6 +268,42 @@ impl CameraWindow {
                 self.show_toast(&format!("{}: {error}", gettext("Could not switch camera")))
             }
         }
+    }
+
+    fn select_camera(&self, index: usize) {
+        match self.imp().camera_view.select_camera(index) {
+            Ok(info) => {
+                self.update_camera_menu();
+                let view = self.imp().camera_view.get();
+                self.imp().preview_frame.set_ratio(view.preview_aspect());
+                self.show_toast(&info.label);
+            }
+            Err(error) => {
+                self.show_toast(&format!("{}: {error}", gettext("Could not switch camera")))
+            }
+        }
+    }
+
+    fn update_camera_menu(&self) {
+        let cameras = self.imp().camera_view.cameras();
+        let current = self.imp().camera_view.current_camera_index();
+        let menu = gio::Menu::new();
+
+        for (index, camera) in cameras.iter().enumerate() {
+            let label = if current == Some(index) {
+                format!("✓ {}", camera.label)
+            } else {
+                camera.label.clone()
+            };
+            let item = gio::MenuItem::new(Some(&label), None);
+            item.set_action_and_target_value(
+                Some("win.select-camera"),
+                Some(&(index as i32).to_variant()),
+            );
+            menu.append_item(&item);
+        }
+
+        self.imp().camera_menu_button.set_menu_model(Some(&menu));
     }
 
     fn on_photo_result(&self, path: &str, ok: bool) {
@@ -284,68 +359,61 @@ impl CameraWindow {
         }
     }
 
-    fn show_last_photo(&self) {
+    fn open_last_photo(&self) {
         let Some(path) = self.imp().last_photo_path.borrow().clone() else {
             return;
         };
-
-        let title = gettext("Photo");
-        let dialog = adw::Dialog::builder()
-            .title(title.clone())
-            .content_width(360)
-            .content_height(640)
-            .build();
-        let toolbar = adw::ToolbarView::new();
-        let header = adw::HeaderBar::new();
-        header.set_title_widget(Some(&gtk::Label::new(Some(title.as_str()))));
-
-        let open = gtk::Button::from_icon_name("external-link-symbolic");
-        open.set_tooltip_text(Some(&gettext("Open in Image Viewer")));
-        let file = gio::File::for_path(&path);
-        let parent = self.clone();
-        open.connect_clicked(move |_| {
-            let launcher = gtk::FileLauncher::new(Some(&file));
-            launcher.launch(Some(&parent), None::<&gio::Cancellable>, |result| {
-                if let Err(error) = result {
-                    eprintln!("open photo: {error}");
-                }
-            });
-        });
-        header.pack_end(&open);
-
-        toolbar.add_top_bar(&header);
-        let picture = gtk::Picture::for_filename(&path);
-        picture.set_content_fit(gtk::ContentFit::Contain);
-        picture.set_hexpand(true);
-        picture.set_vexpand(true);
-        toolbar.set_content(Some(&picture));
-
-        dialog.set_child(Some(&toolbar));
-        dialog.present(Some(self));
-    }
-
-    fn update_layout(&self) {
-        let landscape = self.width() > self.height();
-        let controls = self.imp().controls.get();
-
-        if landscape {
-            controls.set_halign(gtk::Align::End);
-            controls.set_valign(gtk::Align::Center);
-            controls.set_margin_start(0);
-            controls.set_margin_end(28);
-            controls.set_margin_top(0);
-            controls.set_margin_bottom(0);
-        } else {
-            controls.set_halign(gtk::Align::Fill);
-            controls.set_valign(gtk::Align::End);
-            controls.set_margin_start(24);
-            controls.set_margin_end(24);
-            controls.set_margin_top(0);
-            controls.set_margin_bottom(28);
+        if !path.exists() {
+            self.show_toast(&gettext("Photo not found"));
+            return;
         }
+
+        let settings = gio::Settings::new("io.github.nico359.camera");
+        let ask = settings.boolean("open-with-dialog");
+
+        // The OpenURI portal deliberately shows an app chooser for local
+        // files, regardless of its `ask` option.  When the user did not ask
+        // for the chooser, launch the host's default handler instead.  This
+        // needs --talk-name=org.freedesktop.Flatpak in the manifest.
+        if !ask {
+            if let Err(error) = open_with_host(&path) {
+                eprintln!("host open failed, falling back to the portal: {error}");
+            } else {
+                return;
+            }
+        }
+
+        let file = gio::File::for_path(&path);
+        let launcher = gtk::FileLauncher::new(Some(&file));
+        launcher.set_always_ask(ask);
+
+        let weak = self.downgrade();
+        launcher.launch(Some(self), None::<&gio::Cancellable>, move |result| {
+            if let Err(error) = result {
+                if let Some(window) = weak.upgrade() {
+                    window.show_toast(&format!("{}: {error}", gettext("Could not open photo")));
+                }
+            }
+        });
     }
 
     fn show_toast(&self, message: &str) {
         self.imp().toast_overlay.add_toast(adw::Toast::new(message));
+    }
+}
+
+fn open_with_host(path: &Path) -> Result<(), String> {
+    let status = std::process::Command::new("flatpak-spawn")
+        .arg("--host")
+        .arg("gio")
+        .arg("open")
+        .arg(path)
+        .status()
+        .map_err(|error| error.to_string())?;
+
+    if status.success() {
+        Ok(())
+    } else {
+        Err(format!("flatpak-spawn exited with {status}"))
     }
 }

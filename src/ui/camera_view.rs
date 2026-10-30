@@ -246,7 +246,35 @@ impl CameraView {
         self.imp().session.borrow_mut().set_device_rotation(degrees);
     }
 
-    pub fn switch_camera(&self) -> Result<CameraInfo, CameraError> {
+    pub fn flip_camera(&self) -> Result<CameraInfo, CameraError> {
+        self.open_camera(CameraSession::flip)
+    }
+
+    pub fn select_camera(&self, index: usize) -> Result<CameraInfo, CameraError> {
+        if self.imp().session.borrow().current_index() == Some(index) {
+            return self
+                .imp()
+                .session
+                .borrow()
+                .current()
+                .cloned()
+                .ok_or(CameraError::NotOpen);
+        }
+        self.open_camera(|session| session.select(index))
+    }
+
+    pub fn cameras(&self) -> Vec<CameraInfo> {
+        self.imp().session.borrow().cameras().to_vec()
+    }
+
+    pub fn current_camera_index(&self) -> Option<usize> {
+        self.imp().session.borrow().current_index()
+    }
+
+    fn open_camera<F>(&self, change: F) -> Result<CameraInfo, CameraError>
+    where
+        F: FnOnce(&mut CameraSession) -> Result<CameraInfo, CameraError>,
+    {
         if !self.imp().session.borrow().is_open() {
             return Err(CameraError::NotOpen);
         }
@@ -255,7 +283,7 @@ impl CameraView {
 
         let result = {
             let mut session = self.imp().session.borrow_mut();
-            session.switch().and_then(|info| {
+            change(&mut session).and_then(|info| {
                 session
                     .start_preview(PREVIEW_WIDTH, PREVIEW_HEIGHT)
                     .map(|()| info)
