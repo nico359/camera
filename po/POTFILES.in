@@ -1,0 +1,6 @@
+# List of source files containing translatable strings.
+# Please keep this file sorted alphabetically.
+data/io.github.nico359.camera.desktop.in
+data/io.github.nico359.camera.metainfo.xml.in
+data/io.github.nico359.camera.gschema.xml
+src/window.ui

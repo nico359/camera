@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist gettext-domain="camera">
+	<schema id="io.github.nico359.camera" path="/io/github/nico359/camera/">
+	</schema>
+</schemalist>

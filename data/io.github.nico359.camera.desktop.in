@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=Camera
+Exec=camera
+Icon=io.github.nico359.camera
+Terminal=false
+Type=Application
+Categories=Utility;
+Keywords=GTK;
+StartupNotify=true
+DBusActivatable=true
