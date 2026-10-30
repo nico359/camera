@@ -8,6 +8,7 @@
 #include "CameraSession.h"
 #include "PreviewRenderer.h"
 
+#include <cstdio>
 #include <new>
 #include <string>
 
@@ -19,6 +20,7 @@ struct fc2_camera {
     PreviewRenderer renderer;
     std::string     openId;
     int             sensorOrientation = 0;
+    bool            mirror = false;
 };
 
 extern "C" {
@@ -26,6 +28,35 @@ extern "C" {
 int fc2_available(void)
 {
     return CameraSession::isHostStub() ? 0 : 1;
+}
+
+fc2_camera* fc2_open_id(const char* id)
+{
+    if (!id || CameraSession::isHostStub())
+        return nullptr;
+
+    auto* c = new (std::nothrow) fc2_camera();
+    if (!c)
+        return nullptr;
+    if (!c->session.enumerate()) {
+        delete c;
+        return nullptr;
+    }
+
+    int orient = -1;
+    for (const auto& ci : c->session.cameras()) {
+        if (ci.id == id) {
+            orient = ci.sensorOrientation;
+            break;
+        }
+    }
+    if (orient < 0 || !c->session.open(id)) {
+        delete c;
+        return nullptr;
+    }
+    c->openId = id;
+    c->sensorOrientation = orient;
+    return c;
 }
 
 fc2_camera* fc2_open(int facing)
@@ -58,6 +89,23 @@ fc2_camera* fc2_open(int facing)
     return c;
 }
 
+int fc2_list_open_cameras(fc2_camera* c, fc2_camera_info* out, int max)
+{
+    if (!c || !out || max <= 0)
+        return 0;
+
+    int n = 0;
+    for (const auto& ci : c->session.cameras()) {
+        if (n >= max)
+            break;
+        std::snprintf(out[n].id, sizeof(out[n].id), "%s", ci.id.c_str());
+        out[n].facing = ci.facing;
+        out[n].sensor_orientation = ci.sensorOrientation;
+        ++n;
+    }
+    return n;
+}
+
 void fc2_close(fc2_camera* c)
 {
     if (!c)
@@ -83,7 +131,20 @@ int fc2_render_preview(fc2_camera* c, int view_w, int view_h, int rotation_deg)
 {
     if (!c)
         return 0;
-    return c->renderer.render(c->session.previewReader(), view_w, view_h, rotation_deg) ? 1 : 0;
+    return c->renderer.render(c->session.previewReader(), view_w, view_h, rotation_deg,
+                              1.0f, 1.0f, c->mirror) ? 1 : 0;
+}
+
+void fc2_set_device_rotation(fc2_camera* c, int degrees)
+{
+    if (c)
+        c->session.setDeviceRotation(degrees);
+}
+
+void fc2_set_preview_mirror(fc2_camera* c, int on)
+{
+    if (c)
+        c->mirror = (on != 0);
 }
 
 void fc2_set_frame_callback(fc2_camera* c, void (*cb)(void*), void* user)

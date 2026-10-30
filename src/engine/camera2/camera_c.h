@@ -27,8 +27,24 @@ typedef struct fc2_camera fc2_camera;
 /* 1 if a real camera backend is reachable (0 on a non-Halium host stub build). */
 int fc2_available(void);
 
+/* One camera reported by fc2_list_cameras(). */
+typedef struct fc2_camera_info {
+    char id[64];
+    int  facing;              /* FC2_FACING_* */
+    int  sensor_orientation;  /* degrees clockwise from natural portrait */
+} fc2_camera_info;
+
 /* Open the engine and the first camera matching `facing`.  NULL on failure. */
 fc2_camera* fc2_open(int facing);
+
+/* List the cameras discovered by an open camera's session.  Call after
+ * fc2_open()/fc2_open_id(); returns the number of entries written (up to
+ * `max`).  Enumerating through a separate temporary session destabilises some
+ * Halium camera HALs, so this deliberately reuses the open session. */
+int fc2_list_open_cameras(fc2_camera* c, fc2_camera_info* out, int max);
+
+/* Open a specific camera by the id returned from fc2_list_cameras(). */
+fc2_camera* fc2_open_id(const char* id);
 void        fc2_close(fc2_camera* c);
 
 /* Sensor mount orientation in degrees — the frontend uses it to rotate preview. */
@@ -41,6 +57,14 @@ void fc2_stop_preview(fc2_camera* c);
 /* Draw the latest preview frame into the CURRENT GL context, filling
  * [0,0,view_w,view_h] rotated `rotation_deg`.  Returns 1 if a frame was drawn. */
 int  fc2_render_preview(fc2_camera* c, int view_w, int view_h, int rotation_deg);
+
+/* Device tilt in degrees clockwise from natural portrait (0/90/180/270).
+ * The session uses it to set the JPEG/video orientation tag; call it whenever
+ * the device rotates, before capturing. */
+void fc2_set_device_rotation(fc2_camera* c, int degrees);
+
+/* Mirror the preview horizontally, for the front/selfie camera. */
+void fc2_set_preview_mirror(fc2_camera* c, int on);
 
 /* Called on a camera thread when a new frame is ready (schedule a redraw). */
 void fc2_set_frame_callback(fc2_camera* c, void (*cb)(void* user), void* user);
