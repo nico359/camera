@@ -18,8 +18,9 @@ Implemented:
 - asynchronous capture feedback: the UI reports when the JPEG is actually
   written, not when the request is submitted
 - a last-media thumbnail that opens through the system OpenURI portal; the
-  “Ask Which App to Open Media” menu toggle forces the app chooser (the portal
-  may still show it for local files depending on its per-type policy)
+  first open may show the app chooser, after which the portal remembers the
+  choice per content type. The “Ask Which App to Open Media” toggle forces the
+  chooser again
 - black preview canvas and header bar; the preview sits above a dedicated
   control bar, so it is centered between the header and the shutter row rather
   than behind the controls
@@ -82,8 +83,8 @@ Requirements:
 - The Flatpak is self-hosted on purpose.  `--device=all` and the Halium paths
   make it unsuitable for Flathub.
 - The thumbnail uses the system OpenURI portal.  It does not request the broad
-  `org.freedesktop.Flatpak` host-exec permission; the portal may show an app
-  chooser for local files depending on the user’s per-type policy.
+  `org.freedesktop.Flatpak` host-exec permission.  The first open may show an
+  app chooser; the portal remembers the choice per content type afterwards.
 
 The camera engine links `libhybris` at runtime through the
 `org.freedesktop.Platform.GL.hybris` extension; it does not copy host libraries
