@@ -24,6 +24,14 @@
   background-color: rgba(246, 211, 45, 0.12);
 }
 
-.torch-on {
+.camera-header .flash-off {
+  color: #9a9996;
+}
+
+.camera-header .flash-on {
+  color: #ffffff;
+}
+
+.camera-header .flash-torch {
   color: #f6d32d;
 }

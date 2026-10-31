@@ -42,7 +42,13 @@ mod imp {
         pub preview_frame: TemplateChild<gtk::AspectFrame>,
 
         #[template_child]
+        pub preview_overlay: TemplateChild<gtk::Overlay>,
+
+        #[template_child]
         pub camera_menu_button: TemplateChild<gtk::MenuButton>,
+
+        #[template_child]
+        pub flash_menu_button: TemplateChild<gtk::MenuButton>,
 
         #[template_child]
         pub last_photo_button: TemplateChild<gtk::Button>,
@@ -78,9 +84,6 @@ mod imp {
         pub focus_reticle: TemplateChild<gtk::Box>,
 
         #[template_child]
-        pub torch_button: TemplateChild<gtk::Button>,
-
-        #[template_child]
         pub status_label: TemplateChild<gtk::Label>,
 
         #[template_child]
@@ -91,8 +94,8 @@ mod imp {
         pub(super) switch_action: RefCell<Option<gio::SimpleAction>>,
         pub(super) select_action: RefCell<Option<gio::SimpleAction>>,
         pub(super) video_mode_action: RefCell<Option<gio::SimpleAction>>,
-        pub(super) torch_action: RefCell<Option<gio::SimpleAction>>,
         pub(super) last_media_action: RefCell<Option<gio::SimpleAction>>,
+        pub(super) flash_mode: Cell<i32>,
         pub(super) recording_started: Cell<Option<Instant>>,
         pub(super) recording_tick: RefCell<Option<glib::SourceId>>,
         pub(super) recording_path: RefCell<Option<PathBuf>>,
@@ -178,15 +181,17 @@ mod imp {
             });
             window.add_action(&video_mode);
 
-            let torch = gio::SimpleAction::new("toggle-torch", None);
-            torch.set_enabled(false);
+            let flash = gio::SimpleAction::new("set-flash-mode", Some(glib::VariantTy::INT32));
             let weak = window.downgrade();
-            torch.connect_activate(move |_, _| {
+            flash.connect_activate(move |_, parameter| {
+                let Some(mode) = parameter.and_then(|value| value.get::<i32>()) else {
+                    return;
+                };
                 if let Some(window) = weak.upgrade() {
-                    window.toggle_torch();
+                    window.set_flash_mode(mode);
                 }
             });
-            window.add_action(&torch);
+            window.add_action(&flash);
 
             let zoom_in = gio::SimpleAction::new("zoom-in", None);
             let weak = window.downgrade();
@@ -263,7 +268,6 @@ mod imp {
             *self.switch_action.borrow_mut() = Some(switch);
             *self.select_action.borrow_mut() = Some(select);
             *self.video_mode_action.borrow_mut() = Some(video_mode);
-            *self.torch_action.borrow_mut() = Some(torch);
             *self.last_media_action.borrow_mut() = Some(last_media);
         }
 
@@ -417,17 +421,12 @@ impl CameraWindow {
         if let Some(action) = imp.video_mode_action.borrow().as_ref() {
             action.set_enabled(ready && !recording);
         }
-        if let Some(action) = imp.torch_action.borrow().as_ref() {
-            action.set_enabled(ready && !view.is_front());
-        }
 
         imp.camera_menu_button.set_sensitive(ready && !recording);
-        if view.torch_on() {
-            imp.torch_button.add_css_class("torch-on");
-        } else {
-            imp.torch_button.remove_css_class("torch-on");
-        }
+        imp.flash_menu_button
+            .set_sensitive(ready && !view.is_front());
         self.update_zoom_ui();
+        self.update_flash_ui();
         imp.preview_frame.set_ratio(view.preview_aspect());
 
         if video {
@@ -472,14 +471,53 @@ impl CameraWindow {
         }
     }
 
-    fn toggle_torch(&self) {
+    fn set_flash_mode(&self, mode: i32) {
         let view = self.imp().camera_view.get();
-        if view.is_front() {
-            return;
-        }
-        let on = !view.torch_on();
-        view.set_torch(on);
+        let mode = if view.is_front() {
+            0
+        } else {
+            match mode {
+                1 => 1,
+                3 => 3,
+                _ => 0,
+            }
+        };
+
+        view.set_flash_mode(if mode == 1 { 1 } else { 0 });
+        view.set_torch(mode == 3);
+        self.imp().flash_mode.set(mode);
         self.update_mode_ui();
+    }
+
+    fn update_flash_ui(&self) {
+        let mode = self.imp().flash_mode.get();
+        let menu = gio::Menu::new();
+
+        for (value, label) in [
+            (0, gettext("Off")),
+            (1, gettext("On")),
+            (3, gettext("Torch")),
+        ] {
+            let label = if mode == value {
+                format!("✓ {label}")
+            } else {
+                label
+            };
+            let item = gio::MenuItem::new(Some(&label), None);
+            item.set_action_and_target_value(Some("win.set-flash-mode"), Some(&value.to_variant()));
+            menu.append_item(&item);
+        }
+
+        let button = self.imp().flash_menu_button.get();
+        button.set_menu_model(Some(&menu));
+        for class in ["flash-off", "flash-on", "flash-torch"] {
+            button.remove_css_class(class);
+        }
+        button.add_css_class(match mode {
+            1 => "flash-on",
+            3 => "flash-torch",
+            _ => "flash-off",
+        });
     }
 
     fn zoom_by(&self, delta: f32) {
@@ -508,9 +546,19 @@ impl CameraWindow {
 
     fn show_focus_reticle(&self, x: f64, y: f64) {
         let view = self.imp().camera_view.get();
+        let overlay = self.imp().preview_overlay.get();
+
+        // The gesture coordinates are relative to CameraView; the reticle is
+        // positioned inside the outer preview overlay.  Translate between them
+        // so the reticle lands exactly under the finger.
+        let point = view.compute_point(&overlay, &gtk::graphene::Point::new(x as f32, y as f32));
+        let (x, y) = point
+            .map(|point| (point.x() as f64, point.y() as f64))
+            .unwrap_or((x, y));
+
         let size = 64.0;
-        let max_x = (view.width() as f64 - size).max(0.0);
-        let max_y = (view.height() as f64 - size).max(0.0);
+        let max_x = (overlay.width() as f64 - size).max(0.0);
+        let max_y = (overlay.height() as f64 - size).max(0.0);
         let left = (x - size / 2.0).clamp(0.0, max_x) as i32;
         let top = (y - size / 2.0).clamp(0.0, max_y) as i32;
 
@@ -639,6 +687,7 @@ impl CameraWindow {
         let was_video = self.imp().camera_view.get().video_mode();
         match self.imp().camera_view.flip_camera() {
             Ok(info) => {
+                self.imp().flash_mode.set(0);
                 self.update_camera_menu();
                 let view = self.imp().camera_view.get();
                 self.imp().preview_frame.set_ratio(view.preview_aspect());
@@ -661,6 +710,7 @@ impl CameraWindow {
         let was_video = self.imp().camera_view.get().video_mode();
         match self.imp().camera_view.select_camera(index) {
             Ok(info) => {
+                self.imp().flash_mode.set(0);
                 self.update_camera_menu();
                 let view = self.imp().camera_view.get();
                 self.imp().preview_frame.set_ratio(view.preview_aspect());

@@ -53,7 +53,6 @@ mod imp {
         pub(super) video_mode: Cell<bool>,
         pub(super) video_preview_16_9: Cell<bool>,
         pub(super) zoom: Cell<f32>,
-        pub(super) torch_on: Cell<bool>,
     }
 
     #[glib::object_subclass]
@@ -105,7 +104,6 @@ mod imp {
                 Ok(()) => {
                     self.session.borrow_mut().set_device_rotation(degrees);
                     self.zoom.set(1.0);
-                    self.torch_on.set(false);
                     *self.rotation_source.borrow_mut() = Some(rotation_source);
                     self.start_rotation_tick();
 
@@ -132,7 +130,6 @@ mod imp {
             self.video_mode.set(false);
             self.video_preview_16_9.set(false);
             self.zoom.set(1.0);
-            self.torch_on.set(false);
             obj.set_ready(false);
 
             self.parent_unrealize();
@@ -344,9 +341,9 @@ impl CameraView {
                     let mut session = self.imp().session.borrow_mut();
                     session.set_zoom(1.0);
                     session.set_torch(false);
+                    session.set_flash_mode(0);
                 }
                 self.imp().zoom.set(1.0);
-                self.imp().torch_on.set(false);
                 self.set_status("");
                 self.set_ready(true);
                 Ok(info)
@@ -478,16 +475,15 @@ impl CameraView {
             .unwrap_or(false)
     }
 
-    pub fn torch_on(&self) -> bool {
-        self.imp().torch_on.get()
-    }
-
     pub fn set_torch(&self, on: bool) {
         if self.is_front() {
             return;
         }
         self.imp().session.borrow_mut().set_torch(on);
-        self.imp().torch_on.set(on);
+    }
+
+    pub fn set_flash_mode(&self, mode: i32) {
+        self.imp().session.borrow_mut().set_flash_mode(mode);
     }
 
     /// Map a view-normalized tap to the sensor's active array, then ask the

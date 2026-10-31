@@ -88,6 +88,7 @@ extern "C" {
     fn fc2_set_zoom(camera: *mut fc2_camera, ratio: f32);
     fn fc2_set_focus_point(camera: *mut fc2_camera, x: f32, y: f32);
     fn fc2_set_torch(camera: *mut fc2_camera, on: c_int);
+    fn fc2_set_flash_mode(camera: *mut fc2_camera, mode: c_int);
 }
 
 /// Stable allocation whose address is handed to the C API.  The `Arc` keeps
@@ -407,6 +408,12 @@ impl CameraBackend for Camera2Backend {
     fn set_torch(&mut self, on: bool) {
         if !self.raw.is_null() {
             unsafe { fc2_set_torch(self.raw, on as c_int) };
+        }
+    }
+
+    fn set_flash_mode(&mut self, mode: i32) {
+        if !self.raw.is_null() {
+            unsafe { fc2_set_flash_mode(self.raw, mode) };
         }
     }
 }

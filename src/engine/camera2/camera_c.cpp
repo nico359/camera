@@ -192,6 +192,7 @@ void fc2_set_white_balance(fc2_camera* c, int app_mode)
 void  fc2_set_zoom(fc2_camera* c, float ratio) { if (c) c->session.setZoomRatio(ratio); }
 float fc2_max_zoom(fc2_camera* c)              { return c ? c->session.maxZoomRatio() : 4.0f; }
 void  fc2_set_torch(fc2_camera* c, int on)     { if (c) c->session.setTorch(on != 0); }
+void  fc2_set_flash_mode(fc2_camera* c, int mode) { if (c) c->session.setFlashMode(mode); }
 void  fc2_set_ae_lock(fc2_camera* c, int lock) { if (c) c->session.setAeLock(lock != 0); }
 void  fc2_set_awb_lock(fc2_camera* c, int lock){ if (c) c->session.setAwbLock(lock != 0); }
 void  fc2_set_auto_exposure(fc2_camera* c)     { if (c) c->session.setAutoExposure(); }

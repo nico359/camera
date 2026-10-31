@@ -77,6 +77,7 @@ void  fc2_set_white_balance(fc2_camera* c, int app_mode); /* 0=Auto 1=Daylight 2
 void  fc2_set_zoom(fc2_camera* c, float ratio);           /* 1 .. fc2_max_zoom */
 float fc2_max_zoom(fc2_camera* c);
 void  fc2_set_torch(fc2_camera* c, int on);
+void  fc2_set_flash_mode(fc2_camera* c, int mode); /* 0=off 1=on 2=auto */
 void  fc2_set_ae_lock(fc2_camera* c, int lock);
 void  fc2_set_awb_lock(fc2_camera* c, int lock);
 void  fc2_set_auto_exposure(fc2_camera* c);

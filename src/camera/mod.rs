@@ -113,6 +113,7 @@ pub trait CameraBackend {
     fn set_zoom(&mut self, ratio: f32);
     fn set_focus_point(&mut self, x: f32, y: f32);
     fn set_torch(&mut self, on: bool);
+    fn set_flash_mode(&mut self, mode: i32);
 }
 
 fn create_backend(photo_sink: PhotoSink) -> Result<Box<dyn CameraBackend>, CameraError> {
@@ -384,6 +385,12 @@ impl CameraSession {
     pub fn set_torch(&mut self, on: bool) {
         if let Some(backend) = self.backend.as_mut() {
             backend.set_torch(on);
+        }
+    }
+
+    pub fn set_flash_mode(&mut self, mode: i32) {
+        if let Some(backend) = self.backend.as_mut() {
+            backend.set_flash_mode(mode);
         }
     }
 

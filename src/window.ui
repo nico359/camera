@@ -14,10 +14,22 @@
               <class name="camera-header"/>
             </style>
             <child type="start">
-              <object class="GtkMenuButton" id="camera_menu_button">
-                <property name="icon-name">view-grid-symbolic</property>
-                <property name="tooltip-text" translatable="yes">Choose Camera</property>
-                <property name="sensitive">False</property>
+              <object class="GtkBox">
+                <property name="spacing">6</property>
+                <child>
+                  <object class="GtkMenuButton" id="camera_menu_button">
+                    <property name="icon-name">view-grid-symbolic</property>
+                    <property name="tooltip-text" translatable="yes">Choose Camera</property>
+                    <property name="sensitive">False</property>
+                  </object>
+                </child>
+                <child>
+                  <object class="GtkMenuButton" id="flash_menu_button">
+                    <property name="icon-name">camera-flash-symbolic</property>
+                    <property name="tooltip-text" translatable="yes">Flash Mode</property>
+                    <property name="sensitive">False</property>
+                  </object>
+                </child>
               </object>
             </child>
             <child type="end">
@@ -41,7 +53,7 @@
               <object class="AdwToastOverlay" id="toast_overlay">
                 <property name="vexpand">True</property>
                 <property name="child">
-                  <object class="GtkOverlay">
+                  <object class="GtkOverlay" id="preview_overlay">
                     <style>
                       <class name="camera-background"/>
                     </style>
@@ -236,21 +248,9 @@
                           </object>
                         </child>
                         <child>
-                          <object class="GtkButton" id="torch_button">
-                            <property name="action-name">win.toggle-torch</property>
+                          <object class="GtkBox">
                             <property name="width-request">56</property>
                             <property name="height-request">56</property>
-                            <property name="valign">center</property>
-                            <property name="tooltip-text" translatable="yes">Toggle Torch</property>
-                            <style>
-                              <class name="flat"/>
-                            </style>
-                            <child>
-                              <object class="GtkImage">
-                                <property name="icon-name">media-flash-symbolic</property>
-                                <property name="pixel-size">28</property>
-                              </object>
-                            </child>
                           </object>
                         </child>
                       </object>
