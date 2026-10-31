@@ -112,6 +112,9 @@ pub trait CameraBackend {
     fn max_zoom(&self) -> f32;
     fn set_zoom(&mut self, ratio: f32);
     fn set_focus_point(&mut self, x: f32, y: f32);
+    fn focus_assist_lit(&self) -> bool;
+    fn af_state(&self) -> i32;
+    fn clear_focus_assist(&mut self);
     fn set_torch(&mut self, on: bool);
     fn set_flash_mode(&mut self, mode: i32);
 }
@@ -379,6 +382,26 @@ impl CameraSession {
     pub fn set_focus_point(&mut self, x: f32, y: f32) {
         if let Some(backend) = self.backend.as_mut() {
             backend.set_focus_point(x, y);
+        }
+    }
+
+    pub fn focus_assist_lit(&self) -> bool {
+        self.backend
+            .as_ref()
+            .map(|backend| backend.focus_assist_lit())
+            .unwrap_or(false)
+    }
+
+    pub fn af_state(&self) -> i32 {
+        self.backend
+            .as_ref()
+            .map(|backend| backend.af_state())
+            .unwrap_or(0)
+    }
+
+    pub fn clear_focus_assist(&mut self) {
+        if let Some(backend) = self.backend.as_mut() {
+            backend.clear_focus_assist();
         }
     }
 

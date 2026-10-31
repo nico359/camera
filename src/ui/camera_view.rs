@@ -522,6 +522,18 @@ impl CameraView {
         Ok(())
     }
 
+    pub fn focus_assist_lit(&self) -> bool {
+        self.imp().session.borrow().focus_assist_lit()
+    }
+
+    pub fn af_state(&self) -> i32 {
+        self.imp().session.borrow().af_state()
+    }
+
+    pub fn clear_focus_assist(&self) {
+        self.imp().session.borrow_mut().clear_focus_assist();
+    }
+
     /// Aspect ratio of the preview area.  The preview is deliberately
     /// portrait-locked, so a 4:3 stream from a 90°/270°-mounted sensor is
     /// shown as 3:4; a 16:9 video stream becomes 9:16.  A 0°/180° sensor

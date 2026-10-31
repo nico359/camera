@@ -84,6 +84,12 @@ void  fc2_set_auto_exposure(fc2_camera* c);
 void  fc2_set_manual_exposure(fc2_camera* c, int iso, int64_t exposure_ns);
 void  fc2_set_focus_point(fc2_camera* c, float x, float y); /* normalized [0,1] */
 
+/* AF-assist state used by tap-to-focus.  The frontend polls af_state() and
+ * calls set_torch(false) + clear_focus_assist() once focus settles. */
+int  fc2_focus_assist_lit(fc2_camera* c);
+int  fc2_af_state(fc2_camera* c);
+void fc2_clear_focus_assist(fc2_camera* c);
+
 /* Capture / record.  Capture and recording finish asynchronously. */
 int  fc2_capture_photo(fc2_camera* c, const char* path);
 

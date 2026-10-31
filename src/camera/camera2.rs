@@ -87,6 +87,9 @@ extern "C" {
     fn fc2_max_zoom(camera: *mut fc2_camera) -> f32;
     fn fc2_set_zoom(camera: *mut fc2_camera, ratio: f32);
     fn fc2_set_focus_point(camera: *mut fc2_camera, x: f32, y: f32);
+    fn fc2_focus_assist_lit(camera: *mut fc2_camera) -> c_int;
+    fn fc2_af_state(camera: *mut fc2_camera) -> c_int;
+    fn fc2_clear_focus_assist(camera: *mut fc2_camera);
     fn fc2_set_torch(camera: *mut fc2_camera, on: c_int);
     fn fc2_set_flash_mode(camera: *mut fc2_camera, mode: c_int);
 }
@@ -402,6 +405,24 @@ impl CameraBackend for Camera2Backend {
     fn set_focus_point(&mut self, x: f32, y: f32) {
         if !self.raw.is_null() {
             unsafe { fc2_set_focus_point(self.raw, x, y) };
+        }
+    }
+
+    fn focus_assist_lit(&self) -> bool {
+        !self.raw.is_null() && unsafe { fc2_focus_assist_lit(self.raw) } != 0
+    }
+
+    fn af_state(&self) -> i32 {
+        if self.raw.is_null() {
+            0
+        } else {
+            unsafe { fc2_af_state(self.raw) }
+        }
+    }
+
+    fn clear_focus_assist(&mut self) {
+        if !self.raw.is_null() {
+            unsafe { fc2_clear_focus_assist(self.raw) };
         }
     }
 

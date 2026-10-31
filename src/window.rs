@@ -101,6 +101,7 @@ mod imp {
         pub(super) recording_path: RefCell<Option<PathBuf>>,
         pub(super) zoom_gesture_start: Cell<Option<f32>>,
         pub(super) focus_tick: RefCell<Option<glib::SourceId>>,
+        pub(super) focus_assist_tick: RefCell<Option<glib::SourceId>>,
     }
 
     #[glib::object_subclass]
@@ -319,6 +320,7 @@ mod imp {
                     let ny = (y / height).clamp(0.0, 1.0);
                     if view.focus_at(nx, ny).is_ok() {
                         window.show_focus_reticle(x, y);
+                        window.start_focus_assist_timeout();
                     }
                 }
             });
@@ -384,6 +386,7 @@ impl CameraWindow {
     }
 
     fn toggle_video_mode(&self) {
+        self.clear_focus_assist();
         let view = self.imp().camera_view.get();
         if view.is_recording() {
             self.show_toast(&gettext("Stop recording first"));
@@ -408,6 +411,9 @@ impl CameraWindow {
         let ready = view.ready();
         let video = view.video_mode();
         let recording = view.is_recording();
+        if !ready {
+            self.stop_focus_assist_timeout();
+        }
 
         if let Some(action) = imp.capture_action.borrow().as_ref() {
             action.set_enabled(ready);
@@ -483,6 +489,7 @@ impl CameraWindow {
             }
         };
 
+        self.clear_focus_assist();
         view.set_flash_mode(if mode == 1 { 1 } else { 0 });
         view.set_torch(mode == 3);
         self.imp().flash_mode.set(mode);
@@ -530,6 +537,51 @@ impl CameraWindow {
         let view = self.imp().camera_view.get();
         if view.focus_at(0.5, 0.5).is_ok() {
             self.show_focus_reticle(view.width() as f64 / 2.0, view.height() as f64 / 2.0);
+            self.start_focus_assist_timeout();
+        }
+    }
+
+    fn start_focus_assist_timeout(&self) {
+        let view = self.imp().camera_view.get();
+        if !view.focus_assist_lit() {
+            return;
+        }
+
+        self.stop_focus_assist_timeout();
+        let weak = self.downgrade();
+        let started = Instant::now();
+        let id = glib::timeout_add_local(Duration::from_millis(50), move || match weak.upgrade() {
+            Some(window) => {
+                let view = window.imp().camera_view.get();
+                let state = view.af_state();
+                let elapsed = started.elapsed();
+                let settled = (state == 4 || state == 5) && elapsed >= Duration::from_millis(400);
+                if settled || elapsed >= Duration::from_millis(1500) {
+                    view.set_torch(false);
+                    view.clear_focus_assist();
+                    *window.imp().focus_assist_tick.borrow_mut() = None;
+                    glib::ControlFlow::Break
+                } else {
+                    glib::ControlFlow::Continue
+                }
+            }
+            None => glib::ControlFlow::Break,
+        });
+        *self.imp().focus_assist_tick.borrow_mut() = Some(id);
+    }
+
+    fn stop_focus_assist_timeout(&self) {
+        if let Some(id) = self.imp().focus_assist_tick.borrow_mut().take() {
+            id.remove();
+        }
+    }
+
+    fn clear_focus_assist(&self) {
+        self.stop_focus_assist_timeout();
+        let view = self.imp().camera_view.get();
+        if view.focus_assist_lit() {
+            view.set_torch(false);
+            view.clear_focus_assist();
         }
     }
 
@@ -583,6 +635,7 @@ impl CameraWindow {
     }
 
     fn start_recording(&self) {
+        self.clear_focus_assist();
         let path = match crate::media::next_video_path() {
             Ok(path) => path,
             Err(error) => {
@@ -664,6 +717,7 @@ impl CameraWindow {
     }
 
     fn capture_photo(&self) {
+        self.clear_focus_assist();
         let path = match crate::media::next_photo_path() {
             Ok(path) => path,
             Err(error) => {
@@ -684,6 +738,7 @@ impl CameraWindow {
     }
 
     fn flip_camera(&self) {
+        self.clear_focus_assist();
         let was_video = self.imp().camera_view.get().video_mode();
         match self.imp().camera_view.flip_camera() {
             Ok(info) => {
@@ -707,6 +762,7 @@ impl CameraWindow {
     }
 
     fn select_camera(&self, index: usize) {
+        self.clear_focus_assist();
         let was_video = self.imp().camera_view.get().video_mode();
         match self.imp().camera_view.select_camera(index) {
             Ok(info) => {

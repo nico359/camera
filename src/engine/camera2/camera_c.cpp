@@ -204,6 +204,16 @@ void fc2_set_manual_exposure(fc2_camera* c, int iso, int64_t exposure_ns)
 }
 
 void fc2_set_focus_point(fc2_camera* c, float x, float y) { if (c) c->session.setFocusPoint(x, y); }
+int  fc2_focus_assist_lit(fc2_camera* c)
+{
+    return (c && c->session.focusAssistLit()) ? 1 : 0;
+}
+int  fc2_af_state(fc2_camera* c) { return c ? c->session.afState() : 0; }
+void fc2_clear_focus_assist(fc2_camera* c)
+{
+    if (c)
+        c->session.clearFocusAssist();
+}
 
 int fc2_capture_photo(fc2_camera* c, const char* path)
 {

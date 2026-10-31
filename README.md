@@ -34,7 +34,8 @@ Implemented:
 - pinch zoom (also `+`/`-`) with a zoom indicator
 - tap-to-focus with a reticle; `F` focuses the center
 - flash menu in the header: Off / On / Torch; On uses the still flash,
-  Torch is continuous, and front cameras disable the menu
+  Torch is continuous, and front cameras disable the menu. With flash On,
+  tap-to-focus uses a brief AF-assist torch and turns it off once focus settles
 - video files are written to `~/Videos/Camera/VID_*.mp4`; the thumbnail opens
   photos or videos through the system portal
 - device-rotation-aware still capture through iio-sensor-proxy
