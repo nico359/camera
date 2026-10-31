@@ -353,8 +353,8 @@ mod imp {
                 }
             });
 
+            view.add_controller(zoom.clone());
             click.group_with(&zoom);
-            view.add_controller(zoom);
         }
     }
 }
