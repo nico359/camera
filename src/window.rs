@@ -100,6 +100,8 @@ mod imp {
         pub(super) recording_tick: RefCell<Option<glib::SourceId>>,
         pub(super) recording_path: RefCell<Option<PathBuf>>,
         pub(super) zoom_gesture_start: Cell<Option<f32>>,
+        pub(super) tap_start: Cell<Option<(f64, f64)>>,
+        pub(super) suppress_tap_until: Cell<Option<Instant>>,
         pub(super) focus_tick: RefCell<Option<glib::SourceId>>,
         pub(super) focus_assist_tick: RefCell<Option<glib::SourceId>>,
     }
@@ -308,30 +310,75 @@ mod imp {
         fn setup_gestures(&self) {
             let view = self.camera_view.get();
 
+            // Tap-to-focus happens on release, not on press.  A pinch or swipe
+            // can therefore start first, and only a stationary single-finger
+            // tap focuses.
             let click = gtk::GestureClick::new();
             click.set_button(1);
             let weak = self.obj().downgrade();
             click.connect_pressed(move |_, _, x, y| {
                 if let Some(window) = weak.upgrade() {
-                    let view = window.imp().camera_view.get();
-                    let width = view.width().max(1) as f64;
-                    let height = view.height().max(1) as f64;
-                    let nx = (x / width).clamp(0.0, 1.0);
-                    let ny = (y / height).clamp(0.0, 1.0);
-                    if view.focus_at(nx, ny).is_ok() {
-                        window.show_focus_reticle(x, y);
-                        window.start_focus_assist_timeout();
-                    }
+                    window.imp().tap_start.set(Some((x, y)));
                 }
             });
-            view.add_controller(click.clone());
+
+            let weak = self.obj().downgrade();
+            click.connect_released(move |_, _, x, y| {
+                let Some(window) = weak.upgrade() else {
+                    return;
+                };
+                let imp = window.imp();
+                let Some((start_x, start_y)) = imp.tap_start.take() else {
+                    return;
+                };
+
+                // A pinch in progress, or one that just ended, must not focus.
+                if imp.zoom_gesture_start.get().is_some()
+                    || imp
+                        .suppress_tap_until
+                        .get()
+                        .is_some_and(|until| Instant::now() < until)
+                {
+                    return;
+                }
+
+                // Ignore drags and swipes.
+                let dx = x - start_x;
+                let dy = y - start_y;
+                if dx * dx + dy * dy > 16.0 * 16.0 {
+                    return;
+                }
+
+                let view = imp.camera_view.get();
+                let width = view.width().max(1) as f64;
+                let height = view.height().max(1) as f64;
+                let nx = (x / width).clamp(0.0, 1.0);
+                let ny = (y / height).clamp(0.0, 1.0);
+                if view.focus_at(nx, ny).is_ok() {
+                    window.show_focus_reticle(x, y);
+                    window.start_focus_assist_timeout();
+                }
+            });
+
+            let weak = self.obj().downgrade();
+            click.connect_cancel(move |_, _| {
+                if let Some(window) = weak.upgrade() {
+                    window.imp().tap_start.set(None);
+                }
+            });
+
+            view.add_controller(click);
 
             let zoom = gtk::GestureZoom::new();
             let weak = self.obj().downgrade();
             zoom.connect_begin(move |_, _| {
                 if let Some(window) = weak.upgrade() {
                     let view = window.imp().camera_view.get();
-                    window.imp().zoom_gesture_start.set(Some(view.zoom()));
+                    let imp = window.imp();
+                    imp.zoom_gesture_start.set(Some(view.zoom()));
+                    imp.tap_start.set(None);
+                    imp.suppress_tap_until
+                        .set(Some(Instant::now() + Duration::from_millis(300)));
                 }
             });
 
@@ -349,12 +396,14 @@ mod imp {
             let weak = self.obj().downgrade();
             zoom.connect_end(move |_, _| {
                 if let Some(window) = weak.upgrade() {
-                    window.imp().zoom_gesture_start.set(None);
+                    let imp = window.imp();
+                    imp.zoom_gesture_start.set(None);
+                    imp.suppress_tap_until
+                        .set(Some(Instant::now() + Duration::from_millis(300)));
                 }
             });
 
-            view.add_controller(zoom.clone());
-            click.group_with(&zoom);
+            view.add_controller(zoom);
         }
     }
 }

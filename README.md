@@ -37,7 +37,8 @@ Halium camera stack.
 - camera switching while idle in video mode; cameras that cannot do video fall
   back to photo mode with a warning
 - pinch zoom (also `+`/`-`) with a zoom indicator
-- tap-to-focus with a reticle; `F` focuses the center
+- tap-to-focus with a reticle; `F` focuses the center. Focus is applied on
+  release and only for a stationary tap, so swipes and pinches don't trigger it
 - flash menu in the header: Off / On / Torch; On uses the still flash,
   Torch is continuous, and front cameras disable the menu. With flash On,
   tap-to-focus uses a brief AF-assist torch and turns it off once focus settles
