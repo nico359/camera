@@ -90,22 +90,3 @@ pub fn latest_media() -> Option<PathBuf> {
 
     latest.map(|(path, _)| path)
 }
-
-/// Open a file in the host's default application.  Inside the Flatpak this
-/// needs `--talk-name=org.freedesktop.Flatpak`; outside it simply fails and the
-/// caller can fall back to the portal.
-pub fn open_with_host(path: &Path) -> Result<(), String> {
-    let status = std::process::Command::new("flatpak-spawn")
-        .arg("--host")
-        .arg("gio")
-        .arg("open")
-        .arg(path)
-        .status()
-        .map_err(|error| error.to_string())?;
-
-    if status.success() {
-        Ok(())
-    } else {
-        Err(format!("flatpak-spawn exited with {status}"))
-    }
-}

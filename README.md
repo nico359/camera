@@ -17,8 +17,9 @@ Implemented:
   JPEG stream; on the FuriPhone this is 5152×3864)
 - asynchronous capture feedback: the UI reports when the JPEG is actually
   written, not when the request is submitted
-- a last-shot thumbnail that opens the photo in the default viewer; an
-  optional “Ask Which App to Open Photos” menu toggle enables the chooser
+- a last-media thumbnail that opens through the system OpenURI portal; the
+  “Ask Which App to Open Media” menu toggle forces the app chooser (the portal
+  may still show it for local files depending on its per-type policy)
 - black preview canvas and header bar; the preview sits above a dedicated
   control bar, so it is centered between the header and the shutter row rather
   than behind the controls
@@ -30,7 +31,7 @@ Implemented:
 - camera switching while idle in video mode; cameras that cannot do video fall
   back to photo mode with a warning
 - video files are written to `~/Videos/Camera/VID_*.mp4`; the thumbnail opens
-  either photos or videos in the default viewer
+  photos or videos through the system portal
 - device-rotation-aware still capture through iio-sensor-proxy
 - flip (front/back) button in the bottom row beside the shutter, and a camera
   picker in the header that includes every enumerated camera, including the
@@ -80,11 +81,9 @@ Requirements:
   not find the camera HAL.
 - The Flatpak is self-hosted on purpose.  `--device=all` and the Halium paths
   make it unsuitable for Flathub.
-- The manifest also asks for `--talk-name=org.freedesktop.Flatpak`.  The
-  OpenURI portal always shows an app chooser for local files, so the thumbnail
-  needs a narrow `flatpak-spawn --host gio open` path to honor “open in the
-  default viewer”.  The “Ask Which App to Open Photos” menu toggle switches
-  back to the portal chooser.
+- The thumbnail uses the system OpenURI portal.  It does not request the broad
+  `org.freedesktop.Flatpak` host-exec permission; the portal may show an app
+  chooser for local files depending on the user’s per-type policy.
 
 The camera engine links `libhybris` at runtime through the
 `org.freedesktop.Platform.GL.hybris` extension; it does not copy host libraries

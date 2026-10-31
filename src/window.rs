@@ -587,18 +587,6 @@ impl CameraWindow {
         let settings = gio::Settings::new("io.github.nico359.camera");
         let ask = settings.boolean("open-with-dialog");
 
-        // The OpenURI portal deliberately shows an app chooser for local
-        // files, regardless of its `ask` option.  When the user did not ask
-        // for the chooser, launch the host's default handler instead.  This
-        // needs --talk-name=org.freedesktop.Flatpak in the manifest.
-        if !ask {
-            if let Err(error) = crate::media::open_with_host(&path) {
-                eprintln!("host open failed, falling back to the portal: {error}");
-            } else {
-                return;
-            }
-        }
-
         let file = gio::File::for_path(&path);
         let launcher = gtk::FileLauncher::new(Some(&file));
         launcher.set_always_ask(ask);

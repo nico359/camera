@@ -13,7 +13,6 @@
         "--socket=wayland",
         "--socket=pulseaudio",
         "--device=all",
-        "--talk-name=org.freedesktop.Flatpak",
         "--system-talk-name=net.hadess.SensorProxy",
         "--filesystem=xdg-pictures/Camera:create",
         "--filesystem=xdg-videos/Camera:create",
