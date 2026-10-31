@@ -1,10 +1,12 @@
 [Desktop Entry]
 Name=Camera
+Comment=Take photos and videos
 Exec=camera
 Icon=io.github.nico359.camera
 Terminal=false
 Type=Application
-Categories=AudioVideo;Graphics;
-Keywords=camera;photo;video;GTK;
+Categories=AudioVideo;Video;Recorder;Photography;
+Keywords=camera;photo;video;capture;flash;focus;
 StartupNotify=true
 DBusActivatable=true
+X-Purism-FormFactor=Workstation;Mobile;

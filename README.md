@@ -1,15 +1,20 @@
 # Camera
 
-A GTK4/libadwaita camera application for GNOME and Halium-based Linux phones.
+A GTK4/libadwaita camera application for FuriOS and other Halium-based Linux
+phones.
 
-The app is deliberately small at this stage: it proves the FuriCam Camera2
-engine can drive a native GTK4 preview, full-resolution still capture and
-1080p H.264 recording inside a Flatpak, and it leaves room for a V4L2/libcamera
-backend later.
+Camera drives the [FuriCam](https://github.com/nico359/furicam) Camera2 engine
+from a native GTK4 frontend. The 0.1.0 milestone proves the stack end to end:
+a real Camera2 viewfinder, full-resolution stills and hardware-encoded video
+inside a Flatpak. A V4L2/libcamera backend is planned for devices without the
+Halium camera stack.
 
-## Status
+<p>
+  <img src="data/screenshot-photo.png" width="240" alt="Photo mode">
+  <img src="data/screenshot-video.png" width="240" alt="Video mode">
+</p>
 
-Implemented:
+## Features
 
 - live preview through `GtkGLArea`, letterboxed to the still aspect ratio and
   redrawn at the engine's capture rate (30 fps)
@@ -45,11 +50,25 @@ Implemented:
 - front-camera preview mirroring
 - a Flatpak manifest with the permissions the Halium camera stack needs
 
+## Roadmap
+
 Not implemented yet:
 
 - gallery, settings dialog, grid/level, HDR, RAW, and the manual
-  exposure/ISO/shutter “pro” controls.  The engine already exposes most of
+  exposure/ISO/shutter “pro” controls. The engine already exposes most of
   these through its C API; the UI is the remaining work.
+- a V4L2/libcamera backend for devices without the Halium camera stack.
+
+Known limitations:
+
+- Flash **On** uses the engine's still-flash path but does not run FuriCam's
+  full preflash/AF-assist capture sequence yet.
+- Video frame rate can drop in low light because the engine's AE range is
+  15–30 fps.
+- The preview is portrait-locked by design; saved photos and videos follow the
+  device tilt.
+- The Flatpak is self-hosted because it needs `--device=all` and the Halium
+  paths, so it is not suitable for Flathub.
 
 ## Building
 
@@ -95,6 +114,10 @@ The camera engine links `libhybris` at runtime through the
 `org.freedesktop.Platform.GL.hybris` extension; it does not copy host libraries
 into `/app`.
 
+Release builds use Cargo's `release` profile with LTO, a single codegen unit
+and stripped symbols. The Flatpak manifest already builds with
+`-Dbuildtype=release`.
+
 ## Configuration
 
 `meson_options.txt` has one option:
@@ -109,6 +132,22 @@ meson setup build -Dcamera2=true
 Audio recording is enabled automatically when `pkg-config` finds
 `gstreamer-1.0` and `gstreamer-app-1.0`.  Without them the engine builds its
 video-only AAC stub and recording still works, just without sound.
+
+## Credits
+
+- The Camera2 engine is vendored from
+  [FuriCam](https://github.com/nico359/furicam) by nico359 and contributors.
+  FuriCam is based on
+  [FuriOS-camera](https://github.com/FuriLabs/furios-camera) by Furi Labs.
+- The UI is built with GTK4 and libadwaita and follows GNOME design
+  conventions.
+- The application icon is original artwork for this project.
+
+## AI Disclosure
+
+This application was built with the assistance of AI (OpenCode with DeepSeek).
+The upstream FuriCam project also describes its code as AI-generated; see that
+project for details.
 
 ## Licensing
 

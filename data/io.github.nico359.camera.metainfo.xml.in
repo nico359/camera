@@ -5,11 +5,14 @@
   <project_license>GPL-2.0-or-later</project_license>
 
   <name>Camera</name>
-  <summary>Take pictures with your camera</summary>
+  <summary>Take photos and videos on Linux phones</summary>
   <description>
-    <p>Camera is a GTK4 and libadwaita camera application. On FuriOS and other Halium devices it uses the FuriCam Camera2 engine for full-resolution photos and hardware video encoding.</p>
-    <p>This is an early development snapshot: live preview, photo capture and front/back switching are implemented.</p>
+    <p>Camera is a GTK4 and libadwaita camera application for FuriOS and other Halium-based Linux phones. It uses the FuriCam Camera2 engine for a real viewfinder, full-resolution photos and hardware-encoded video inside a Flatpak.</p>
+    <p>The 0.1.0 release includes live preview, full-resolution JPEG capture, 1080p H.264 video with AAC audio, front/back and secondary camera switching, pinch zoom, tap-to-focus, and Off/On/Torch flash control.</p>
+    <p>Photos and videos are saved to the standard Pictures/Camera and Videos/Camera folders. The last-media thumbnail opens the system viewer through the OpenURI portal.</p>
   </description>
+
+  <icon type="stock">io.github.nico359.camera</icon>
 
   <developer id="io.github.nico359">
     <name>nico359</name>
@@ -19,14 +22,65 @@
   <url type="vcs-browser">https://github.com/nico359/camera</url>
   <url type="bugtracker">https://github.com/nico359/camera/issues</url>
 
+  <supports>
+    <control>keyboard</control>
+    <control>pointing</control>
+    <control>touch</control>
+  </supports>
+
+  <requires>
+    <display_length compare="ge">360</display_length>
+  </requires>
+
   <translation type="gettext">camera</translation>
   <launchable type="desktop-id">io.github.nico359.camera.desktop</launchable>
+
+  <categories>
+    <category>AudioVideo</category>
+    <category>Video</category>
+    <category>Recorder</category>
+    <category>Photography</category>
+  </categories>
+
+  <keywords>
+    <keyword>camera</keyword>
+    <keyword>photo</keyword>
+    <keyword>video</keyword>
+    <keyword>capture</keyword>
+    <keyword>flash</keyword>
+    <keyword>focus</keyword>
+  </keywords>
+
+  <screenshots>
+    <screenshot type="default">
+      <caption>Photo mode</caption>
+      <image>https://raw.githubusercontent.com/nico359/camera/v0.1.0/data/screenshot-photo.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Video mode</caption>
+      <image>https://raw.githubusercontent.com/nico359/camera/v0.1.0/data/screenshot-video.png</image>
+    </screenshot>
+  </screenshots>
+
+  <branding>
+    <color type="primary" scheme_preference="light">#62a0ea</color>
+    <color type="primary" scheme_preference="dark">#1c71d8</color>
+  </branding>
+
   <content_rating type="oars-1.1" />
 
   <releases>
-    <release version="0.1.0" date="2026-10-30">
-      <description>
-        <p>Initial Camera2 preview, photo capture and camera switching.</p>
+    <release version="0.1.0" date="2026-10-31" type="stable">
+      <description translate="no">
+        <p>First milestone release.</p>
+        <ul>
+          <li>Camera2 live preview with full-resolution JPEG capture</li>
+          <li>1080p H.264 video recording with AAC audio</li>
+          <li>Front, back and secondary camera switching, including the macro camera in the picker</li>
+          <li>Pinch zoom, tap-to-focus and Off/On/Torch flash control</li>
+          <li>Device-rotation-aware photos and a last-media thumbnail that opens through the system portal</li>
+          <li>GNOME 51 Flatpak for FuriOS and other Halium phones</li>
+        </ul>
       </description>
     </release>
   </releases>

@@ -22,3 +22,9 @@ features = ["v1_6"]
 [build-dependencies]
 cc = "1"
 pkg-config = "0.3"
+
+[profile.release]
+strip = true
+lto = true
+codegen-units = 1
+opt-level = 3
