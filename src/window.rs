@@ -72,6 +72,15 @@ mod imp {
         pub recording_label: TemplateChild<gtk::Label>,
 
         #[template_child]
+        pub zoom_label: TemplateChild<gtk::Label>,
+
+        #[template_child]
+        pub focus_reticle: TemplateChild<gtk::Box>,
+
+        #[template_child]
+        pub torch_button: TemplateChild<gtk::Button>,
+
+        #[template_child]
         pub status_label: TemplateChild<gtk::Label>,
 
         #[template_child]
@@ -82,10 +91,13 @@ mod imp {
         pub(super) switch_action: RefCell<Option<gio::SimpleAction>>,
         pub(super) select_action: RefCell<Option<gio::SimpleAction>>,
         pub(super) video_mode_action: RefCell<Option<gio::SimpleAction>>,
+        pub(super) torch_action: RefCell<Option<gio::SimpleAction>>,
         pub(super) last_media_action: RefCell<Option<gio::SimpleAction>>,
         pub(super) recording_started: Cell<Option<Instant>>,
         pub(super) recording_tick: RefCell<Option<glib::SourceId>>,
         pub(super) recording_path: RefCell<Option<PathBuf>>,
+        pub(super) zoom_gesture_start: Cell<Option<f32>>,
+        pub(super) focus_tick: RefCell<Option<glib::SourceId>>,
     }
 
     #[glib::object_subclass]
@@ -109,6 +121,7 @@ mod imp {
             self.obj().add_css_class("camera-window");
             self.setup_actions();
             self.setup_status();
+            self.setup_gestures();
             self.obj().load_latest_media();
         }
     }
@@ -165,6 +178,43 @@ mod imp {
             });
             window.add_action(&video_mode);
 
+            let torch = gio::SimpleAction::new("toggle-torch", None);
+            torch.set_enabled(false);
+            let weak = window.downgrade();
+            torch.connect_activate(move |_, _| {
+                if let Some(window) = weak.upgrade() {
+                    window.toggle_torch();
+                }
+            });
+            window.add_action(&torch);
+
+            let zoom_in = gio::SimpleAction::new("zoom-in", None);
+            let weak = window.downgrade();
+            zoom_in.connect_activate(move |_, _| {
+                if let Some(window) = weak.upgrade() {
+                    window.zoom_by(0.5);
+                }
+            });
+            window.add_action(&zoom_in);
+
+            let zoom_out = gio::SimpleAction::new("zoom-out", None);
+            let weak = window.downgrade();
+            zoom_out.connect_activate(move |_, _| {
+                if let Some(window) = weak.upgrade() {
+                    window.zoom_by(-0.5);
+                }
+            });
+            window.add_action(&zoom_out);
+
+            let focus_center = gio::SimpleAction::new("focus-center", None);
+            let weak = window.downgrade();
+            focus_center.connect_activate(move |_, _| {
+                if let Some(window) = weak.upgrade() {
+                    window.focus_center();
+                }
+            });
+            window.add_action(&focus_center);
+
             let last_media = gio::SimpleAction::new("open-last-media", None);
             last_media.set_enabled(false);
             let weak = window.downgrade();
@@ -204,12 +254,16 @@ mod imp {
                 application.set_accels_for_action("win.capture", &["space"]);
                 application.set_accels_for_action("win.switch-camera", &["s"]);
                 application.set_accels_for_action("win.toggle-video-mode", &["v"]);
+                application.set_accels_for_action("win.zoom-in", &["plus", "equal"]);
+                application.set_accels_for_action("win.zoom-out", &["minus"]);
+                application.set_accels_for_action("win.focus-center", &["f"]);
             }
 
             *self.capture_action.borrow_mut() = Some(capture);
             *self.switch_action.borrow_mut() = Some(switch);
             *self.select_action.borrow_mut() = Some(select);
             *self.video_mode_action.borrow_mut() = Some(video_mode);
+            *self.torch_action.borrow_mut() = Some(torch);
             *self.last_media_action.borrow_mut() = Some(last_media);
         }
 
@@ -244,6 +298,57 @@ mod imp {
                     window.on_photo_result(path, ok);
                 }
             });
+        }
+
+        fn setup_gestures(&self) {
+            let view = self.camera_view.get();
+
+            let click = gtk::GestureClick::new();
+            click.set_button(1);
+            let weak = self.obj().downgrade();
+            click.connect_pressed(move |_, _, x, y| {
+                if let Some(window) = weak.upgrade() {
+                    let view = window.imp().camera_view.get();
+                    let width = view.width().max(1) as f64;
+                    let height = view.height().max(1) as f64;
+                    let nx = (x / width).clamp(0.0, 1.0);
+                    let ny = (y / height).clamp(0.0, 1.0);
+                    if view.focus_at(nx, ny).is_ok() {
+                        window.show_focus_reticle(x, y);
+                    }
+                }
+            });
+            view.add_controller(click.clone());
+
+            let zoom = gtk::GestureZoom::new();
+            let weak = self.obj().downgrade();
+            zoom.connect_begin(move |_, _| {
+                if let Some(window) = weak.upgrade() {
+                    let view = window.imp().camera_view.get();
+                    window.imp().zoom_gesture_start.set(Some(view.zoom()));
+                }
+            });
+
+            let weak = self.obj().downgrade();
+            zoom.connect_scale_changed(move |gesture, _| {
+                if let Some(window) = weak.upgrade() {
+                    let view = window.imp().camera_view.get();
+                    let start = window.imp().zoom_gesture_start.get().unwrap_or(1.0);
+                    let target = start * gesture.scale_delta() as f32;
+                    view.set_zoom(target);
+                    window.update_zoom_ui();
+                }
+            });
+
+            let weak = self.obj().downgrade();
+            zoom.connect_end(move |_, _| {
+                if let Some(window) = weak.upgrade() {
+                    window.imp().zoom_gesture_start.set(None);
+                }
+            });
+
+            click.group_with(&zoom);
+            view.add_controller(zoom);
         }
     }
 }
@@ -312,8 +417,17 @@ impl CameraWindow {
         if let Some(action) = imp.video_mode_action.borrow().as_ref() {
             action.set_enabled(ready && !recording);
         }
+        if let Some(action) = imp.torch_action.borrow().as_ref() {
+            action.set_enabled(ready && !view.is_front());
+        }
 
         imp.camera_menu_button.set_sensitive(ready && !recording);
+        if view.torch_on() {
+            imp.torch_button.add_css_class("torch-on");
+        } else {
+            imp.torch_button.remove_css_class("torch-on");
+        }
+        self.update_zoom_ui();
         imp.preview_frame.set_ratio(view.preview_aspect());
 
         if video {
@@ -356,6 +470,68 @@ impl CameraWindow {
             imp.recording_started.set(None);
             imp.recording_label.set_visible(false);
         }
+    }
+
+    fn toggle_torch(&self) {
+        let view = self.imp().camera_view.get();
+        if view.is_front() {
+            return;
+        }
+        let on = !view.torch_on();
+        view.set_torch(on);
+        self.update_mode_ui();
+    }
+
+    fn zoom_by(&self, delta: f32) {
+        let view = self.imp().camera_view.get();
+        view.set_zoom(view.zoom() + delta);
+        self.update_zoom_ui();
+    }
+
+    fn focus_center(&self) {
+        let view = self.imp().camera_view.get();
+        if view.focus_at(0.5, 0.5).is_ok() {
+            self.show_focus_reticle(view.width() as f64 / 2.0, view.height() as f64 / 2.0);
+        }
+    }
+
+    fn update_zoom_ui(&self) {
+        let zoom = self.imp().camera_view.get().zoom();
+        let label = self.imp().zoom_label.get();
+        if zoom > 1.005 {
+            label.set_text(&format!("{zoom:.1}×"));
+            label.set_visible(true);
+        } else {
+            label.set_visible(false);
+        }
+    }
+
+    fn show_focus_reticle(&self, x: f64, y: f64) {
+        let view = self.imp().camera_view.get();
+        let size = 64.0;
+        let max_x = (view.width() as f64 - size).max(0.0);
+        let max_y = (view.height() as f64 - size).max(0.0);
+        let left = (x - size / 2.0).clamp(0.0, max_x) as i32;
+        let top = (y - size / 2.0).clamp(0.0, max_y) as i32;
+
+        let reticle = self.imp().focus_reticle.get();
+        reticle.set_margin_start(left);
+        reticle.set_margin_top(top);
+        reticle.set_visible(true);
+
+        if let Some(id) = self.imp().focus_tick.borrow_mut().take() {
+            id.remove();
+        }
+
+        let weak = self.downgrade();
+        let id = glib::timeout_add_local(Duration::from_millis(1200), move || {
+            if let Some(window) = weak.upgrade() {
+                window.imp().focus_reticle.set_visible(false);
+                *window.imp().focus_tick.borrow_mut() = None;
+            }
+            glib::ControlFlow::Break
+        });
+        *self.imp().focus_tick.borrow_mut() = Some(id);
     }
 
     fn start_recording(&self) {

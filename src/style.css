@@ -17,3 +17,13 @@
   border-bottom: none;
   box-shadow: none;
 }
+
+.focus-reticle {
+  border: 2px solid #f6d32d;
+  border-radius: 10px;
+  background-color: rgba(246, 211, 45, 0.12);
+}
+
+.torch-on {
+  color: #f6d32d;
+}

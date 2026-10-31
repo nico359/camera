@@ -84,6 +84,10 @@ extern "C" {
         callback: Option<extern "C" fn(*mut c_void, *const c_char, c_int)>,
         user_data: *mut c_void,
     );
+    fn fc2_max_zoom(camera: *mut fc2_camera) -> f32;
+    fn fc2_set_zoom(camera: *mut fc2_camera, ratio: f32);
+    fn fc2_set_focus_point(camera: *mut fc2_camera, x: f32, y: f32);
+    fn fc2_set_torch(camera: *mut fc2_camera, on: c_int);
 }
 
 /// Stable allocation whose address is handed to the C API.  The `Arc` keeps
@@ -378,6 +382,32 @@ impl CameraBackend for Camera2Backend {
 
     fn recording_write_failed(&self) -> bool {
         !self.raw.is_null() && unsafe { fc2_recording_write_failed(self.raw) } != 0
+    }
+
+    fn max_zoom(&self) -> f32 {
+        if self.raw.is_null() {
+            1.0
+        } else {
+            unsafe { fc2_max_zoom(self.raw) }.max(1.0)
+        }
+    }
+
+    fn set_zoom(&mut self, ratio: f32) {
+        if !self.raw.is_null() {
+            unsafe { fc2_set_zoom(self.raw, ratio) };
+        }
+    }
+
+    fn set_focus_point(&mut self, x: f32, y: f32) {
+        if !self.raw.is_null() {
+            unsafe { fc2_set_focus_point(self.raw, x, y) };
+        }
+    }
+
+    fn set_torch(&mut self, on: bool) {
+        if !self.raw.is_null() {
+            unsafe { fc2_set_torch(self.raw, on as c_int) };
+        }
     }
 }
 

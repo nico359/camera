@@ -15,7 +15,7 @@ use gtk::glib;
 use gtk::prelude::*;
 use gtk::subclass::prelude::*;
 
-use crate::camera::{CameraError, CameraInfo, CameraSession};
+use crate::camera::{CameraError, CameraInfo, CameraSession, Facing};
 use crate::device_rotation::DeviceRotation;
 
 const PREVIEW_WIDTH: i32 = 1280;
@@ -52,6 +52,8 @@ mod imp {
         render_timeout: RefCell<Option<glib::SourceId>>,
         pub(super) video_mode: Cell<bool>,
         pub(super) video_preview_16_9: Cell<bool>,
+        pub(super) zoom: Cell<f32>,
+        pub(super) torch_on: Cell<bool>,
     }
 
     #[glib::object_subclass]
@@ -102,6 +104,8 @@ mod imp {
             match result {
                 Ok(()) => {
                     self.session.borrow_mut().set_device_rotation(degrees);
+                    self.zoom.set(1.0);
+                    self.torch_on.set(false);
                     *self.rotation_source.borrow_mut() = Some(rotation_source);
                     self.start_rotation_tick();
 
@@ -127,6 +131,8 @@ mod imp {
             self.rotation_source.borrow_mut().take();
             self.video_mode.set(false);
             self.video_preview_16_9.set(false);
+            self.zoom.set(1.0);
+            self.torch_on.set(false);
             obj.set_ready(false);
 
             self.parent_unrealize();
@@ -334,6 +340,13 @@ impl CameraView {
 
         match result {
             Ok(info) => {
+                {
+                    let mut session = self.imp().session.borrow_mut();
+                    session.set_zoom(1.0);
+                    session.set_torch(false);
+                }
+                self.imp().zoom.set(1.0);
+                self.imp().torch_on.set(false);
                 self.set_status("");
                 self.set_ready(true);
                 Ok(info)
@@ -440,6 +453,77 @@ impl CameraView {
         session.stop_recording();
         let write_failed = session.recording_write_failed();
         Ok(write_failed)
+    }
+
+    pub fn zoom(&self) -> f32 {
+        self.imp().zoom.get()
+    }
+
+    pub fn max_zoom(&self) -> f32 {
+        self.imp().session.borrow().max_zoom().max(1.0)
+    }
+
+    pub fn set_zoom(&self, zoom: f32) {
+        let zoom = zoom.clamp(1.0, self.max_zoom());
+        self.imp().session.borrow_mut().set_zoom(zoom);
+        self.imp().zoom.set(zoom);
+    }
+
+    pub fn is_front(&self) -> bool {
+        self.imp()
+            .session
+            .borrow()
+            .current()
+            .map(|camera| camera.facing == Facing::Front)
+            .unwrap_or(false)
+    }
+
+    pub fn torch_on(&self) -> bool {
+        self.imp().torch_on.get()
+    }
+
+    pub fn set_torch(&self, on: bool) {
+        if self.is_front() {
+            return;
+        }
+        self.imp().session.borrow_mut().set_torch(on);
+        self.imp().torch_on.set(on);
+    }
+
+    /// Map a view-normalized tap to the sensor's active array, then ask the
+    /// engine to focus there.  This is the inverse of the preview rotation plus
+    /// the front-camera mirror (the same mapping FuriCam uses).
+    pub fn focus_at(&self, x: f64, y: f64) -> Result<(), CameraError> {
+        if !self.ready() {
+            return Err(CameraError::NotOpen);
+        }
+
+        let (rotation, mirrored) = {
+            let session = self.imp().session.borrow();
+            let rotation = (session.sensor_orientation() + 180).rem_euclid(360);
+            let mirrored = session
+                .current()
+                .map(|camera| camera.facing == Facing::Front)
+                .unwrap_or(false);
+            (rotation, mirrored)
+        };
+
+        let rad = rotation as f64 * std::f64::consts::PI / 180.0;
+        let sin = rad.sin();
+        let cos = rad.cos();
+        let nx = x.clamp(0.0, 1.0) - 0.5;
+        let ny = y.clamp(0.0, 1.0) - 0.5;
+        let mut sx = cos * nx - sin * ny + 0.5;
+        let sy = sin * nx + cos * ny + 0.5;
+        if mirrored {
+            sx = 1.0 - sx;
+        }
+
+        self.imp()
+            .session
+            .borrow_mut()
+            .set_focus_point(sx.clamp(0.0, 1.0) as f32, sy.clamp(0.0, 1.0) as f32);
+        Ok(())
     }
 
     /// Aspect ratio of the preview area.  The preview is deliberately

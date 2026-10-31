@@ -31,6 +31,9 @@ Implemented:
   audio is included when the build finds GStreamer
 - camera switching while idle in video mode; cameras that cannot do video fall
   back to photo mode with a warning
+- pinch zoom (also `+`/`-`) with a zoom indicator
+- tap-to-focus with a reticle; `F` focuses the center
+- torch toggle for back cameras
 - video files are written to `~/Videos/Camera/VID_*.mp4`; the thumbnail opens
   photos or videos through the system portal
 - device-rotation-aware still capture through iio-sensor-proxy
@@ -42,9 +45,9 @@ Implemented:
 
 Not implemented yet:
 
-- gallery, settings dialog, grid/level, HDR, RAW, manual controls.  The engine
-  already exposes most of these through its C API; the UI is the remaining
-  work.
+- gallery, settings dialog, grid/level, HDR, RAW, and the manual
+  exposure/ISO/shutter “pro” controls.  The engine already exposes most of
+  these through its C API; the UI is the remaining work.
 
 ## Building
 

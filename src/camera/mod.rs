@@ -109,6 +109,10 @@ pub trait CameraBackend {
     fn recording_write_failed(&self) -> bool;
     fn set_device_rotation(&mut self, degrees: i32);
     fn set_preview_mirror(&mut self, mirror: bool);
+    fn max_zoom(&self) -> f32;
+    fn set_zoom(&mut self, ratio: f32);
+    fn set_focus_point(&mut self, x: f32, y: f32);
+    fn set_torch(&mut self, on: bool);
 }
 
 fn create_backend(photo_sink: PhotoSink) -> Result<Box<dyn CameraBackend>, CameraError> {
@@ -356,6 +360,31 @@ impl CameraSession {
             .as_ref()
             .map(|backend| backend.recording_write_failed())
             .unwrap_or(false)
+    }
+
+    pub fn max_zoom(&self) -> f32 {
+        self.backend
+            .as_ref()
+            .map(|backend| backend.max_zoom())
+            .unwrap_or(1.0)
+    }
+
+    pub fn set_zoom(&mut self, ratio: f32) {
+        if let Some(backend) = self.backend.as_mut() {
+            backend.set_zoom(ratio);
+        }
+    }
+
+    pub fn set_focus_point(&mut self, x: f32, y: f32) {
+        if let Some(backend) = self.backend.as_mut() {
+            backend.set_focus_point(x, y);
+        }
+    }
+
+    pub fn set_torch(&mut self, on: bool) {
+        if let Some(backend) = self.backend.as_mut() {
+            backend.set_torch(on);
+        }
     }
 
     pub fn close(&mut self) {
