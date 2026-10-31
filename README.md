@@ -1,13 +1,12 @@
 # Camera
 
 A GTK4/libadwaita camera application for FuriOS and other Halium-based Linux
-phones.
+phones (maybe, the only other phone I can test is the Pixel 3a running Droidian and it doesn't work there).
 
 Camera drives the [FuriCam](https://github.com/nico359/furicam) Camera2 engine
 from a native GTK4 frontend. The 0.1.0 milestone proves the stack end to end:
 a real Camera2 viewfinder, full-resolution stills and hardware-encoded video
-inside a Flatpak. A V4L2/libcamera backend is planned for devices without the
-Halium camera stack.
+inside a Flatpak. Feature parity with FuriCam or at least close to it is planned. Might abandon FuriCam for this at some point because furios-camera will keep developing as well but let's see.
 
 <p>
   <img src="data/screenshot-photo.png" width="240" alt="Photo mode">
@@ -58,7 +57,6 @@ Not implemented yet:
 - gallery, settings dialog, grid/level, HDR, RAW, and the manual
   exposure/ISO/shutter “pro” controls. The engine already exposes most of
   these through its C API; the UI is the remaining work.
-- a V4L2/libcamera backend for devices without the Halium camera stack.
 
 Known limitations:
 
@@ -69,7 +67,7 @@ Known limitations:
 - The preview is portrait-locked by design; saved photos and videos follow the
   device tilt.
 - The Flatpak is self-hosted because it needs `--device=all` and the Halium
-  paths, so it is not suitable for Flathub.
+  paths, so it is not suitable for Flathub (also vibe coded as hell).
 
 ## Building
 
@@ -137,18 +135,16 @@ video-only AAC stub and recording still works, just without sound.
 ## Credits
 
 - The Camera2 engine is vendored from
-  [FuriCam](https://github.com/nico359/furicam) by nico359 and contributors.
+  [FuriCam](https://github.com/nico359/furicam) and was also mostly vibe coded and contributed by Sean Pollard.
   FuriCam is based on
   [FuriOS-camera](https://github.com/FuriLabs/furios-camera) by Furi Labs.
+- Overall design inspiration was taken from [GNOME Snapshot](https://gitlab.gnome.org/GNOME/snapshot).
 - The UI is built with GTK4 and libadwaita and follows GNOME design
   conventions.
-- The application icon is original artwork for this project.
 
 ## AI Disclosure
 
 This application was built with the assistance of AI (OpenCode with DeepSeek).
-The upstream FuriCam project also describes its code as AI-generated; see that
-project for details.
 
 ## Licensing
 
