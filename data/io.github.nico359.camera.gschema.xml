@@ -27,6 +27,11 @@
 			<summary>Show 3x3 grid</summary>
 			<description>Draw a 3x3 composition grid over the preview.</description>
 		</key>
+		<key name="show-level" type="b">
+			<default>false</default>
+			<summary>Show level</summary>
+			<description>Draw a bubble level over the preview using the accelerometer.</description>
+		</key>
 		<key name="video-resolution" type="s">
 			<choices>
 				<choice value="1920x1080"/>

@@ -46,11 +46,11 @@ inside a Flatpak. Feature parity with FuriCam or at least close to it is planned
   using every advertised JPEG size/aspect (typically 4:3 and 16:9, plus any
   other native sizes the camera exposes), JPEG quality tiers
   (Original/Balanced/Medium/Small), video resolution (1080p/4K), an optional
-  video stabilization (EIS) switch, a 3×3 composition grid toggle, and the
-  “Ask Which App to Open Media” preference. The quality tiers map to the
-  camera's JPEG quality 100/70/40/20; they are deliberately names rather than
-  percentages because the HAL chooses the actual compression, and the JPEG is
-  written by the HAL directly without an on-disk re-encode
+  video stabilization (EIS) switch, a 3×3 composition grid toggle, a bubble
+  level, and the “Ask Which App to Open Media” preference. The quality tiers
+  map to the camera's JPEG quality 100/70/40/20; they are deliberately names
+  rather than percentages because the HAL chooses the actual compression, and
+  the JPEG is written by the HAL directly without an on-disk re-encode
 - video files are written to `~/Videos/Camera/VID_*.mp4`; the thumbnail opens
   photos or videos through the system portal
 - device-rotation-aware still capture through iio-sensor-proxy
@@ -64,9 +64,9 @@ inside a Flatpak. Feature parity with FuriCam or at least close to it is planned
 
 Not implemented yet:
 
-- gallery, level, HDR, RAW, and the manual exposure/ISO/shutter “pro”
-  controls. The engine already exposes most of these through its C API; the UI
-  is the remaining work.
+- gallery, HDR, RAW, and the manual exposure/ISO/shutter “pro” controls. The
+  engine already exposes most of these through its C API; the UI is the
+  remaining work.
 
 Known limitations:
 
@@ -77,6 +77,8 @@ Known limitations:
 - 4K recording may be unstable on this HAL; 1080p is the safe default.
 - Video stabilization (EIS) crops the video field of view; it is off by
   default in Settings.
+- The level uses SensorFW (`com.nokia.SensorService`). If that service is
+  unavailable, the bubble has no readings.
 - The preview is portrait-locked by design; saved photos and videos follow the
   device tilt.
 - The Flatpak is self-hosted because it needs `--device=all` and the Halium

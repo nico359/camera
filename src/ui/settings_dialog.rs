@@ -186,6 +186,13 @@ pub fn present(window: &CameraWindow) {
     grid.set_active(settings.show_grid());
     settings.gio().bind("show-grid", &grid, "active").build();
     composition_group.add(&grid);
+
+    let level = adw::SwitchRow::new();
+    level.set_title(&gettext("Show Level"));
+    level.set_subtitle(&gettext("Bubble level from the accelerometer"));
+    level.set_active(settings.show_level());
+    settings.gio().bind("show-level", &level, "active").build();
+    composition_group.add(&level);
     page.add(&composition_group);
 
     let video_group = adw::PreferencesGroup::new();

@@ -124,6 +124,10 @@ impl AppSettings {
         self.settings.boolean("show-grid")
     }
 
+    pub fn show_level(&self) -> bool {
+        self.settings.boolean("show-level")
+    }
+
     pub fn video_size(&self) -> (i32, i32) {
         parse_size(&self.settings.string("video-resolution")).unwrap_or((1920, 1080))
     }

@@ -20,6 +20,7 @@
 
 use std::cell::{Cell, RefCell};
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use adw::prelude::*;
@@ -27,6 +28,7 @@ use adw::subclass::prelude::*;
 use gettextrs::gettext;
 use gtk::{gio, glib};
 
+use crate::level_sensor::LevelSensor;
 use crate::settings::AppSettings;
 use crate::ui::CameraView;
 
@@ -45,6 +47,50 @@ fn draw_grid(cr: &gtk::cairo::Context, width: f64, height: f64) {
     }
 }
 
+/// Bubble level. `angle` is the roll error in degrees relative to the nearest
+/// 90° orientation; the bubble is green when within 1.5°.
+fn draw_level(cr: &gtk::cairo::Context, width: f64, height: f64, angle: f64) {
+    let center_x = width / 2.0;
+    let center_y = height / 2.0;
+    let half = (width * 0.32).min(150.0);
+    let offset = (angle * (half / 30.0)).clamp(-half, half);
+    let level = angle.abs() < 1.5;
+
+    cr.set_source_rgba(0.0, 0.0, 0.0, 0.35);
+    cr.set_line_width(2.0);
+    cr.move_to(center_x - half, center_y);
+    cr.line_to(center_x + half, center_y);
+    let _ = cr.stroke();
+
+    cr.set_source_rgba(1.0, 1.0, 1.0, 0.55);
+    cr.set_line_width(1.0);
+    cr.move_to(center_x - half, center_y);
+    cr.line_to(center_x + half, center_y);
+    let _ = cr.stroke();
+
+    cr.move_to(center_x, center_y - 6.0);
+    cr.line_to(center_x, center_y + 6.0);
+    let _ = cr.stroke();
+
+    let bubble_x = center_x + offset;
+    cr.set_source_rgba(0.0, 0.0, 0.0, 0.5);
+    cr.arc(bubble_x, center_y, 9.0, 0.0, std::f64::consts::TAU);
+    let _ = cr.fill();
+
+    if level {
+        cr.set_source_rgba(0.2, 0.82, 0.4, 0.95);
+    } else {
+        cr.set_source_rgba(1.0, 1.0, 1.0, 0.9);
+    }
+    cr.arc(bubble_x, center_y, 7.0, 0.0, std::f64::consts::TAU);
+    let _ = cr.fill();
+
+    cr.set_source_rgba(0.0, 0.0, 0.0, 0.6);
+    cr.set_line_width(1.0);
+    cr.arc(bubble_x, center_y, 7.0, 0.0, std::f64::consts::TAU);
+    let _ = cr.stroke();
+}
+
 mod imp {
     use super::*;
 
@@ -59,6 +105,9 @@ mod imp {
 
         #[template_child]
         pub grid_overlay: TemplateChild<gtk::DrawingArea>,
+
+        #[template_child]
+        pub level_overlay: TemplateChild<gtk::DrawingArea>,
 
         #[template_child]
         pub preview_overlay: TemplateChild<gtk::Overlay>,
@@ -123,6 +172,8 @@ mod imp {
         pub(super) suppress_tap_until: Cell<Option<Instant>>,
         pub(super) focus_tick: RefCell<Option<glib::SourceId>>,
         pub(super) focus_assist_tick: RefCell<Option<glib::SourceId>>,
+        pub(super) settings: AppSettings,
+        pub(super) level_sensor: RefCell<Option<Rc<LevelSensor>>>,
     }
 
     #[glib::object_subclass]
@@ -148,6 +199,7 @@ mod imp {
             self.setup_status();
             self.setup_gestures();
             self.setup_grid();
+            self.setup_level();
             self.obj().load_latest_media();
         }
     }
@@ -176,6 +228,44 @@ mod imp {
             let settings = AppSettings::new();
             grid.set_visible(settings.show_grid());
             settings.gio().bind("show-grid", &grid, "visible").build();
+        }
+
+        fn setup_level(&self) {
+            let level = self.level_overlay.get();
+            let angle = Rc::new(Cell::new(0.0_f64));
+            let angle_draw = Rc::clone(&angle);
+            level.set_draw_func(move |_, cr, width, height| {
+                draw_level(cr, width as f64, height as f64, angle_draw.get());
+            });
+
+            let level_draw = level.clone();
+            let angle_cb = Rc::clone(&angle);
+            let sensor = Rc::new(LevelSensor::new(move |error| {
+                let smoothed = angle_cb.get() * 0.75 + error * 0.25;
+                angle_cb.set(smoothed);
+                level_draw.queue_draw();
+            }));
+
+            let show = self.settings.show_level();
+            level.set_visible(show);
+            if show {
+                sensor.set_active(true);
+            }
+            *self.level_sensor.borrow_mut() = Some(sensor);
+
+            let weak = self.obj().downgrade();
+            self.settings
+                .gio()
+                .connect_changed(Some("show-level"), move |settings, _| {
+                    let show = settings.boolean("show-level");
+                    if let Some(window) = weak.upgrade() {
+                        let imp = window.imp();
+                        imp.level_overlay.get().set_visible(show);
+                        if let Some(sensor) = imp.level_sensor.borrow().as_ref() {
+                            sensor.set_active(show);
+                        }
+                    }
+                });
         }
 
         fn setup_actions(&self) {

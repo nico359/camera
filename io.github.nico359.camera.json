@@ -14,6 +14,7 @@
         "--socket=pulseaudio",
         "--device=all",
         "--system-talk-name=net.hadess.SensorProxy",
+        "--system-talk-name=com.nokia.SensorService",
         "--filesystem=xdg-pictures/Camera:create",
         "--filesystem=xdg-videos/Camera:create",
         "--env=HYBRIS_LD_LIBRARY_PATH=/system/lib64:/vendor/lib64:/odm/lib64"

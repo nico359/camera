@@ -82,6 +82,13 @@
                             <property name="vexpand">True</property>
                           </object>
                         </child>
+                        <child type="overlay">
+                          <object class="GtkDrawingArea" id="level_overlay">
+                            <property name="can-target">False</property>
+                            <property name="hexpand">True</property>
+                            <property name="vexpand">True</property>
+                          </object>
+                        </child>
                       </object>
                     </property>
                   </object>
