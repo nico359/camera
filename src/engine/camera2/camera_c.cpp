@@ -147,10 +147,16 @@ void fc2_stop_preview(fc2_camera* c) { if (c) c->session.stopPreview(); }
 
 int fc2_render_preview(fc2_camera* c, int view_w, int view_h, int rotation_deg)
 {
+    return fc2_render_preview_cropped(c, view_w, view_h, rotation_deg, 1.0f, 1.0f);
+}
+
+int fc2_render_preview_cropped(fc2_camera* c, int view_w, int view_h, int rotation_deg,
+                               float crop_x, float crop_y)
+{
     if (!c)
         return 0;
     return c->renderer.render(c->session.previewReader(), view_w, view_h, rotation_deg,
-                              1.0f, 1.0f, c->mirror) ? 1 : 0;
+                              crop_x, crop_y, c->mirror) ? 1 : 0;
 }
 
 void fc2_set_device_rotation(fc2_camera* c, int degrees)

@@ -12,6 +12,51 @@ use gtk::glib::variant::ToVariant;
 
 const SCHEMA_ID: &str = "io.github.nico359.camera";
 
+/// Still-image quality tiers.  These intentionally do not expose percentages:
+/// the camera HAL is free to interpret `JPEG_QUALITY` as it likes, and the app
+/// writes the HAL's JPEG directly (no on-disk re-encode).  The HAL values match
+/// FuriCam's proven mapping.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum JpegQuality {
+    Original,
+    #[default]
+    Balanced,
+    Medium,
+    Small,
+}
+
+impl JpegQuality {
+    pub const ALL: [Self; 4] = [Self::Original, Self::Balanced, Self::Medium, Self::Small];
+
+    pub fn key(self) -> &'static str {
+        match self {
+            Self::Original => "original",
+            Self::Balanced => "balanced",
+            Self::Medium => "medium",
+            Self::Small => "small",
+        }
+    }
+
+    pub fn from_key(key: &str) -> Self {
+        match key {
+            "original" => Self::Original,
+            "medium" => Self::Medium,
+            "small" => Self::Small,
+            _ => Self::Balanced,
+        }
+    }
+
+    /// The value written to ACAMERA_JPEG_QUALITY.
+    pub fn hal_value(self) -> i32 {
+        match self {
+            Self::Original => 100,
+            Self::Balanced => 70,
+            Self::Medium => 40,
+            Self::Small => 20,
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct AppSettings {
     settings: gio::Settings,
@@ -39,14 +84,14 @@ impl AppSettings {
         self.settings.boolean("open-with-dialog")
     }
 
-    pub fn jpeg_quality(&self) -> i32 {
-        self.settings.int("jpeg-quality").clamp(70, 100)
+    pub fn jpeg_quality_profile(&self) -> JpegQuality {
+        JpegQuality::from_key(&self.settings.string("jpeg-quality-profile"))
     }
 
-    pub fn set_jpeg_quality(&self, quality: i32) {
+    pub fn set_jpeg_quality_profile(&self, profile: JpegQuality) {
         let _ = self
             .settings
-            .set_int("jpeg-quality", quality.clamp(70, 100));
+            .set_string("jpeg-quality-profile", profile.key());
     }
 
     /// The saved JPEG size for a camera, or `None` for its full resolution.

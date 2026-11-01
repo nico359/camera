@@ -51,11 +51,13 @@ extern "C" {
         with_still: c_int,
     ) -> c_int;
     fn fc2_stop_preview(camera: *mut fc2_camera);
-    fn fc2_render_preview(
+    fn fc2_render_preview_cropped(
         camera: *mut fc2_camera,
         view_width: c_int,
         view_height: c_int,
         rotation_deg: c_int,
+        crop_x: f32,
+        crop_y: f32,
     ) -> c_int;
     fn fc2_set_device_rotation(camera: *mut fc2_camera, degrees: c_int);
     fn fc2_set_preview_mirror(camera: *mut fc2_camera, on: c_int);
@@ -321,12 +323,21 @@ impl CameraBackend for Camera2Backend {
         }
     }
 
-    fn render_preview(&mut self, width: i32, height: i32, rotation: i32) -> bool {
+    fn render_preview(
+        &mut self,
+        width: i32,
+        height: i32,
+        rotation: i32,
+        crop_x: f32,
+        crop_y: f32,
+    ) -> bool {
         if self.raw.is_null() {
             return false;
         }
 
-        unsafe { fc2_render_preview(self.raw, width, height, rotation) != 0 }
+        unsafe {
+            fc2_render_preview_cropped(self.raw, width, height, rotation, crop_x, crop_y) != 0
+        }
     }
 
     fn capture_photo(&mut self, path: &Path) -> Result<(), CameraError> {

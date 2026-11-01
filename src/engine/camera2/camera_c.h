@@ -61,6 +61,11 @@ void fc2_stop_preview(fc2_camera* c);
  * [0,0,view_w,view_h] rotated `rotation_deg`.  Returns 1 if a frame was drawn. */
 int  fc2_render_preview(fc2_camera* c, int view_w, int view_h, int rotation_deg);
 
+/* Same, but show only the centred crop_x/crop_y (0..1) sub-rect of the preview
+ * stream, so a full-FOV 4:3 stream can fill any photo aspect WYSIWYG. */
+int  fc2_render_preview_cropped(fc2_camera* c, int view_w, int view_h, int rotation_deg,
+                                float crop_x, float crop_y);
+
 /* Device tilt in degrees clockwise from natural portrait (0/90/180/270).
  * The session uses it to set the JPEG/video orientation tag; call it whenever
  * the device rotates, before capturing. */

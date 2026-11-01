@@ -87,7 +87,14 @@ pub trait CameraBackend {
     fn jpeg_sizes(&self) -> Vec<(i32, i32)>;
     fn set_jpeg_size(&mut self, width: i32, height: i32);
     fn set_jpeg_quality(&mut self, quality: i32);
-    fn render_preview(&mut self, width: i32, height: i32, rotation: i32) -> bool;
+    fn render_preview(
+        &mut self,
+        width: i32,
+        height: i32,
+        rotation: i32,
+        crop_x: f32,
+        crop_y: f32,
+    ) -> bool;
     fn capture_photo(&mut self, path: &Path) -> Result<(), CameraError>;
     fn enter_video_mode(
         &mut self,
@@ -282,10 +289,17 @@ impl CameraSession {
             .start_preview(width, height, with_still)
     }
 
-    pub fn render_preview(&mut self, width: i32, height: i32, rotation: i32) -> bool {
+    pub fn render_preview(
+        &mut self,
+        width: i32,
+        height: i32,
+        rotation: i32,
+        crop_x: f32,
+        crop_y: f32,
+    ) -> bool {
         self.backend
             .as_mut()
-            .map(|backend| backend.render_preview(width, height, rotation))
+            .map(|backend| backend.render_preview(width, height, rotation, crop_x, crop_y))
             .unwrap_or(false)
     }
 

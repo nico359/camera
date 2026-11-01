@@ -41,9 +41,14 @@ inside a Flatpak. Feature parity with FuriCam or at least close to it is planned
 - flash menu in the header: Off / On / Torch; On uses the still flash,
   Torch is continuous, and front cameras disable the menu. With flash On,
   tap-to-focus uses a brief AF-assist torch and turns it off once focus settles
-- a Settings dialog in the hamburger menu with per-camera 4:3 photo
-  resolution, JPEG quality (70–100), and the “Ask Which App to Open Media”
-  preference
+- a Settings dialog in the hamburger menu with per-camera photo resolution
+  using every advertised JPEG size/aspect (typically 4:3 and 16:9, plus any
+  other native sizes the camera exposes), JPEG quality tiers
+  (Original/Balanced/Medium/Small), and the “Ask Which App to Open Media”
+  preference. The quality tiers map to the camera's JPEG quality
+  100/70/40/20; they are deliberately names rather than percentages because
+  the HAL chooses the actual compression, and the JPEG is written by the HAL
+  directly without an on-disk re-encode
 - video files are written to `~/Videos/Camera/VID_*.mp4`; the thumbnail opens
   photos or videos through the system portal
 - device-rotation-aware still capture through iio-sensor-proxy
@@ -67,8 +72,6 @@ Known limitations:
   full preflash/AF-assist capture sequence yet.
 - Video frame rate can drop in low light because the engine's AE range is
   15–30 fps.
-- Photo resolution choices are limited to 4:3 sizes so the preview aspect
-  stays unchanged; 16:9/1:1 stills need preview crop support.
 - The preview is portrait-locked by design; saved photos and videos follow the
   device tilt.
 - The Flatpak is self-hosted because it needs `--device=all` and the Halium

@@ -410,6 +410,11 @@ impl CameraWindow {
         self.imp().camera_view.get()
     }
 
+    pub(crate) fn update_preview_aspect(&self) {
+        let view = self.imp().camera_view.get();
+        self.imp().preview_frame.set_ratio(view.preview_aspect());
+    }
+
     fn show_settings(&self) {
         crate::ui::present_settings(self);
     }

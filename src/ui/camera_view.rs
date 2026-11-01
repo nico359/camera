@@ -28,25 +28,13 @@ const VIDEO_PREVIEW_HEIGHT: i32 = 720;
 const VIDEO_FPS: i32 = 30;
 const VIDEO_BITRATE: i32 = 20_000_000;
 
-/// The app keeps the photo preview at 4:3/3:4, so only offer still sizes with
-/// that aspect.  Other ratios would need a preview crop/aspect change.
-fn is_photo_aspect(width: i32, height: i32) -> bool {
-    if width <= 0 || height <= 0 {
-        return false;
-    }
-    let (long, short) = if width >= height {
-        (width as f32, height as f32)
-    } else {
-        (height as f32, width as f32)
-    };
-    (long / short - 4.0 / 3.0).abs() < 0.02
-}
-
+/// All advertised still sizes, largest first.  The preview crop follows the
+/// selected size's aspect, so 4:3, 16:9, 1:1 and other ratios are all valid.
 fn available_photo_sizes(session: &CameraSession) -> Vec<(i32, i32)> {
     let mut sizes: Vec<(i32, i32)> = session
         .jpeg_sizes()
         .into_iter()
-        .filter(|(width, height)| is_photo_aspect(*width, *height))
+        .filter(|(width, height)| *width > 0 && *height > 0)
         .collect();
     sizes.sort_by_key(|(width, height)| std::cmp::Reverse(*width as i64 * *height as i64));
     sizes.dedup();
@@ -58,13 +46,18 @@ fn apply_saved_photo_size(photo_size: &Cell<(i32, i32)>, session: &mut CameraSes
     let saved = session
         .current()
         .and_then(|camera| AppSettings::new().photo_size(&camera.id));
-    let size = saved.filter(|size| sizes.contains(size)).unwrap_or((0, 0));
-    session.set_jpeg_size(size.0, size.1);
-    photo_size.set(size);
+    let requested = saved.filter(|size| sizes.contains(size));
+    let (request_w, request_h) = requested.unwrap_or((0, 0));
+    let display_size = requested
+        .or_else(|| sizes.first().copied())
+        .unwrap_or((4, 3));
+    session.set_jpeg_size(request_w, request_h);
+    photo_size.set(display_size);
 }
 
 fn apply_saved_jpeg_quality(session: &mut CameraSession) {
-    session.set_jpeg_quality(AppSettings::new().jpeg_quality());
+    let profile = AppSettings::new().jpeg_quality_profile();
+    session.set_jpeg_quality(profile.hal_value());
 }
 
 mod imp {
@@ -189,13 +182,42 @@ mod imp {
             // still/video follows the device tilt. FuriCam does the same, and
             // a rotating preview inside a fixed window is disorienting.
             let rotation = (session.sensor_orientation() + 180).rem_euclid(360);
-            session.render_preview(obj.width() * scale, obj.height() * scale, rotation);
+            let (crop_x, crop_y) = self.photo_crop();
+            session.render_preview(
+                obj.width() * scale,
+                obj.height() * scale,
+                rotation,
+                crop_x,
+                crop_y,
+            );
 
             glib::Propagation::Stop
         }
     }
 
     impl CameraView {
+        /// Crop the 4:3 preview stream to the selected still aspect so the
+        /// viewfinder stays WYSIWYG.  Video mode already uses a native 16:9
+        /// stream and needs no crop.
+        pub(super) fn photo_crop(&self) -> (f32, f32) {
+            if self.video_preview_16_9.get() {
+                return (1.0, 1.0);
+            }
+
+            let (width, height) = self.photo_size.get();
+            if width <= 0 || height <= 0 {
+                return (1.0, 1.0);
+            }
+
+            let stream_aspect = PREVIEW_WIDTH as f32 / PREVIEW_HEIGHT as f32;
+            let target_aspect = width as f32 / height as f32;
+            if target_aspect >= stream_aspect {
+                (1.0, stream_aspect / target_aspect)
+            } else {
+                (target_aspect / stream_aspect, 1.0)
+            }
+        }
+
         fn start_tick(&self) {
             if self.render_timeout.borrow().is_some() {
                 return;
@@ -616,8 +638,9 @@ impl CameraView {
         let cos = rad.cos();
         let nx = x.clamp(0.0, 1.0) - 0.5;
         let ny = y.clamp(0.0, 1.0) - 0.5;
-        let mut sx = cos * nx - sin * ny + 0.5;
-        let sy = sin * nx + cos * ny + 0.5;
+        let (crop_x, crop_y) = self.imp().photo_crop();
+        let mut sx = (cos * nx - sin * ny) * crop_x as f64 + 0.5;
+        let sy = (sin * nx + cos * ny) * crop_y as f64 + 0.5;
         if mirrored {
             sx = 1.0 - sx;
         }
@@ -656,10 +679,20 @@ impl CameraView {
             .borrow()
             .sensor_orientation()
             .rem_euclid(360);
+        let (width, height) = self.imp().photo_size.get();
+        if width <= 0 || height <= 0 {
+            return if sensor % 180 == 90 {
+                3.0 / 4.0
+            } else {
+                4.0 / 3.0
+            };
+        }
+
+        let aspect = width as f32 / height as f32;
         if sensor % 180 == 90 {
-            3.0 / 4.0
+            1.0 / aspect
         } else {
-            4.0 / 3.0
+            aspect
         }
     }
 

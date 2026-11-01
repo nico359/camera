@@ -13,7 +13,7 @@ use adw::prelude::*;
 use gettextrs::gettext;
 use gtk::StringList;
 
-use crate::settings::AppSettings;
+use crate::settings::{AppSettings, JpegQuality};
 use crate::window::CameraWindow;
 
 fn megapixels_label(width: i32, height: i32) -> String {
@@ -22,6 +22,36 @@ fn megapixels_label(width: i32, height: i32) -> String {
         format!("{mp:.0} MP")
     } else {
         format!("{mp:.1} MP")
+    }
+}
+
+fn aspect_label(width: i32, height: i32) -> Option<&'static str> {
+    let ratio = width as f32 / height as f32;
+    [
+        (4.0 / 3.0, "4:3"),
+        (16.0 / 9.0, "16:9"),
+        (3.0 / 2.0, "3:2"),
+        (1.0, "1:1"),
+        (5.0 / 4.0, "5:4"),
+    ]
+    .into_iter()
+    .find(|(candidate, _)| (ratio - candidate).abs() < 0.02)
+    .map(|(_, label)| label)
+}
+
+fn resolution_subtitle(camera: &str, size: Option<(i32, i32)>) -> String {
+    match size.and_then(|(width, height)| aspect_label(width, height)) {
+        Some(aspect) => format!("{camera} · {aspect}"),
+        None => camera.to_string(),
+    }
+}
+
+fn quality_label(profile: JpegQuality) -> String {
+    match profile {
+        JpegQuality::Original => gettext("Original"),
+        JpegQuality::Balanced => gettext("Balanced"),
+        JpegQuality::Medium => gettext("Medium"),
+        JpegQuality::Small => gettext("Small"),
     }
 }
 
@@ -42,7 +72,6 @@ pub fn present(window: &CameraWindow) {
 
     let resolution = adw::ComboRow::new();
     resolution.set_title(&gettext("Photo Resolution"));
-    resolution.set_subtitle(&camera_label);
 
     let saved_size = view
         .current_camera_id()
@@ -50,6 +79,8 @@ pub fn present(window: &CameraWindow) {
     let selected = saved_size
         .and_then(|size| sizes.iter().position(|candidate| *candidate == size))
         .unwrap_or(0) as u32;
+    let initial_size = sizes.get(selected as usize).copied();
+    resolution.set_subtitle(&resolution_subtitle(&camera_label, initial_size));
 
     if sizes.is_empty() {
         let model = StringList::new(&[]);
@@ -79,6 +110,7 @@ pub fn present(window: &CameraWindow) {
         let view_cb = view.clone();
         let settings_cb = settings.clone();
         let sizes_cb = sizes.clone();
+        let camera_label_cb = camera_label.clone();
         let weak = window.downgrade();
         resolution.connect_selected_notify(move |row| {
             if updating_cb.get() {
@@ -95,6 +127,10 @@ pub fn present(window: &CameraWindow) {
                         let full_resolution = sizes_cb.first().copied() == Some(size);
                         settings_cb
                             .set_photo_size(&id, if full_resolution { None } else { Some(size) });
+                    }
+                    row.set_subtitle(&resolution_subtitle(&camera_label_cb, Some(size)));
+                    if let Some(window) = weak.upgrade() {
+                        window.update_preview_aspect();
                     }
                     previous_cb.set(row.selected());
                 }
@@ -114,18 +150,28 @@ pub fn present(window: &CameraWindow) {
     }
     photo_group.add(&resolution);
 
-    let quality = adw::SpinRow::with_range(70.0, 100.0, 5.0);
+    let quality = adw::ComboRow::new();
     quality.set_title(&gettext("JPEG Quality"));
-    quality.set_subtitle(&gettext(
-        "Higher values keep more detail and use more storage",
-    ));
-    quality.set_value(settings.jpeg_quality() as f64);
+    quality.set_subtitle(&gettext("Lower tiers use less space"));
+    let quality_model = StringList::new(&[]);
+    for profile in JpegQuality::ALL {
+        quality_model.append(&quality_label(profile));
+    }
+    quality.set_model(Some(&quality_model));
+    let current_profile = settings.jpeg_quality_profile();
+    let quality_selected = JpegQuality::ALL
+        .iter()
+        .position(|profile| *profile == current_profile)
+        .unwrap_or(1) as u32;
+    quality.set_selected(quality_selected);
     let settings_cb = settings.clone();
     let view_cb = view.clone();
-    quality.connect_value_notify(move |row| {
-        let value = row.value().round() as i32;
-        settings_cb.set_jpeg_quality(value);
-        view_cb.set_jpeg_quality(value);
+    quality.connect_selected_notify(move |row| {
+        let Some(profile) = JpegQuality::ALL.get(row.selected() as usize).copied() else {
+            return;
+        };
+        settings_cb.set_jpeg_quality_profile(profile);
+        view_cb.set_jpeg_quality(profile.hal_value());
     });
     photo_group.add(&quality);
 
