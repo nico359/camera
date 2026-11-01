@@ -97,6 +97,9 @@ mod imp {
     #[template(resource = "/io/github/nico359/camera/window.ui")]
     pub struct CameraWindow {
         #[template_child]
+        pub navigation_view: TemplateChild<adw::NavigationView>,
+
+        #[template_child]
         pub camera_view: TemplateChild<CameraView>,
 
         #[template_child]
@@ -554,6 +557,10 @@ impl CameraWindow {
 
     pub fn camera_view(&self) -> CameraView {
         self.imp().camera_view.get()
+    }
+
+    pub(crate) fn navigation_view(&self) -> adw::NavigationView {
+        self.imp().navigation_view.get()
     }
 
     pub(crate) fn update_preview_aspect(&self) {

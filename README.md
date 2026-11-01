@@ -21,14 +21,16 @@ inside a Flatpak. Feature parity with FuriCam or at least close to it is planned
   JPEG stream; on the FuriPhone this is 5152×3864)
 - asynchronous capture feedback: the UI reports when the JPEG is actually
   written, not when the request is submitted
-- a read-only full-screen media gallery: the last-media thumbnail (by default)
-  and the hamburger Gallery item open a swipeable carousel of photos and videos
-  from the Camera folders. Photos display full-screen; videos play in-app with
-  GStreamer. The header has Close and “Open Externally” buttons. A Settings
-  switch makes the last-media thumbnail open the latest item externally
-  instead; the “Ask Which App to Open Media” switch forces the portal app
-  chooser for external opens. On a keyboard, the arrow keys change pages,
-  Space/Return play or pause a video, and Escape closes the viewer
+- a read-only media viewer inside the main window: the last-media thumbnail
+  (by default) and the hamburger Gallery item push a swipeable carousel of
+  photos and videos from the Camera folders. Photos fill the window; videos
+  show their paused first frame and play in-app with GStreamer, and only the
+  visible page keeps a decoder loaded. The header has Back and “Open
+  Externally” buttons. A Settings switch makes the last-media thumbnail open
+  the latest item externally instead; the “Ask Which App to Open Media” switch
+  forces the portal app chooser for external opens. On a keyboard, the arrow
+  keys change pages, Space/Return play or pause a video, and Escape closes the
+  viewer
 - black preview canvas and header bar; the preview sits above a dedicated
   control bar, so it is centered between the header and the shutter row rather
   than behind the controls
