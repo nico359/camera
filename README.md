@@ -23,8 +23,8 @@ inside a Flatpak. Feature parity with FuriCam or at least close to it is planned
   written, not when the request is submitted
 - a last-media thumbnail that opens through the system OpenURI portal; the
   first open may show the app chooser, after which the portal remembers the
-  choice per content type. The “Ask Which App to Open Media” toggle forces the
-  chooser again
+  choice per content type. The “Ask Which App to Open Media” switch in Settings
+  forces the chooser again
 - black preview canvas and header bar; the preview sits above a dedicated
   control bar, so it is centered between the header and the shutter row rather
   than behind the controls
@@ -41,6 +41,9 @@ inside a Flatpak. Feature parity with FuriCam or at least close to it is planned
 - flash menu in the header: Off / On / Torch; On uses the still flash,
   Torch is continuous, and front cameras disable the menu. With flash On,
   tap-to-focus uses a brief AF-assist torch and turns it off once focus settles
+- a Settings dialog in the hamburger menu with per-camera 4:3 photo
+  resolution, JPEG quality (70–100), and the “Ask Which App to Open Media”
+  preference
 - video files are written to `~/Videos/Camera/VID_*.mp4`; the thumbnail opens
   photos or videos through the system portal
 - device-rotation-aware still capture through iio-sensor-proxy
@@ -54,9 +57,9 @@ inside a Flatpak. Feature parity with FuriCam or at least close to it is planned
 
 Not implemented yet:
 
-- gallery, settings dialog, grid/level, HDR, RAW, and the manual
-  exposure/ISO/shutter “pro” controls. The engine already exposes most of
-  these through its C API; the UI is the remaining work.
+- gallery, grid/level, HDR, RAW, and the manual exposure/ISO/shutter “pro”
+  controls. The engine already exposes most of these through its C API; the UI
+  is the remaining work.
 
 Known limitations:
 
@@ -64,6 +67,8 @@ Known limitations:
   full preflash/AF-assist capture sequence yet.
 - Video frame rate can drop in low light because the engine's AE range is
   15–30 fps.
+- Photo resolution choices are limited to 4:3 sizes so the preview aspect
+  stays unchanged; 16:9/1:1 stills need preview crop support.
 - The preview is portrait-locked by design; saved photos and videos follow the
   device tilt.
 - The Flatpak is self-hosted because it needs `--device=all` and the Halium

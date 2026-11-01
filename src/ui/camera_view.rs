@@ -17,6 +17,7 @@ use gtk::subclass::prelude::*;
 
 use crate::camera::{CameraError, CameraInfo, CameraSession, Facing};
 use crate::device_rotation::DeviceRotation;
+use crate::settings::AppSettings;
 
 const PREVIEW_WIDTH: i32 = 1280;
 const PREVIEW_HEIGHT: i32 = 960;
@@ -26,6 +27,45 @@ const VIDEO_PREVIEW_WIDTH: i32 = 1280;
 const VIDEO_PREVIEW_HEIGHT: i32 = 720;
 const VIDEO_FPS: i32 = 30;
 const VIDEO_BITRATE: i32 = 20_000_000;
+
+/// The app keeps the photo preview at 4:3/3:4, so only offer still sizes with
+/// that aspect.  Other ratios would need a preview crop/aspect change.
+fn is_photo_aspect(width: i32, height: i32) -> bool {
+    if width <= 0 || height <= 0 {
+        return false;
+    }
+    let (long, short) = if width >= height {
+        (width as f32, height as f32)
+    } else {
+        (height as f32, width as f32)
+    };
+    (long / short - 4.0 / 3.0).abs() < 0.02
+}
+
+fn available_photo_sizes(session: &CameraSession) -> Vec<(i32, i32)> {
+    let mut sizes: Vec<(i32, i32)> = session
+        .jpeg_sizes()
+        .into_iter()
+        .filter(|(width, height)| is_photo_aspect(*width, *height))
+        .collect();
+    sizes.sort_by_key(|(width, height)| std::cmp::Reverse(*width as i64 * *height as i64));
+    sizes.dedup();
+    sizes
+}
+
+fn apply_saved_photo_size(photo_size: &Cell<(i32, i32)>, session: &mut CameraSession) {
+    let sizes = available_photo_sizes(session);
+    let saved = session
+        .current()
+        .and_then(|camera| AppSettings::new().photo_size(&camera.id));
+    let size = saved.filter(|size| sizes.contains(size)).unwrap_or((0, 0));
+    session.set_jpeg_size(size.0, size.1);
+    photo_size.set(size);
+}
+
+fn apply_saved_jpeg_quality(session: &mut CameraSession) {
+    session.set_jpeg_quality(AppSettings::new().jpeg_quality());
+}
 
 mod imp {
     use super::*;
@@ -53,6 +93,7 @@ mod imp {
         pub(super) video_mode: Cell<bool>,
         pub(super) video_preview_16_9: Cell<bool>,
         pub(super) zoom: Cell<f32>,
+        pub(super) photo_size: Cell<(i32, i32)>,
     }
 
     #[glib::object_subclass]
@@ -95,9 +136,11 @@ mod imp {
 
             let result = {
                 let mut session = self.session.borrow_mut();
-                session
-                    .open_first()
-                    .and_then(|()| session.start_preview(PREVIEW_WIDTH, PREVIEW_HEIGHT, true))
+                session.open_first().and_then(|()| {
+                    apply_saved_photo_size(&self.photo_size, &mut session);
+                    apply_saved_jpeg_quality(&mut session);
+                    session.start_preview(PREVIEW_WIDTH, PREVIEW_HEIGHT, true)
+                })
             };
 
             match result {
@@ -284,6 +327,67 @@ impl CameraView {
         self.imp().session.borrow().current_index()
     }
 
+    pub fn current_camera(&self) -> Option<CameraInfo> {
+        self.imp().session.borrow().current().cloned()
+    }
+
+    pub fn current_camera_id(&self) -> Option<String> {
+        self.current_camera().map(|camera| camera.id)
+    }
+
+    /// 4:3 still sizes supported by the current camera, largest first.
+    pub fn photo_sizes(&self) -> Vec<(i32, i32)> {
+        let session = self.imp().session.borrow();
+        available_photo_sizes(&session)
+    }
+
+    pub fn set_jpeg_quality(&self, quality: i32) {
+        self.imp().session.borrow_mut().set_jpeg_quality(quality);
+    }
+
+    /// Change the still JPEG size.  In photo mode this restarts the preview so
+    /// the new full-resolution output is part of the capture session; in video
+    /// mode the choice is stored and used when photo mode resumes.
+    pub fn set_photo_size(&self, width: i32, height: i32) -> Result<(), CameraError> {
+        if !self.ready() || !self.imp().session.borrow().is_open() {
+            return Err(CameraError::NotOpen);
+        }
+        if self.imp().session.borrow().is_recording() {
+            return Err(CameraError::Busy);
+        }
+
+        self.make_current();
+        let imp = self.imp();
+        let mut session = imp.session.borrow_mut();
+        let old = imp.photo_size.get();
+        if old == (width, height) {
+            return Ok(());
+        }
+
+        session.set_jpeg_size(width, height);
+        imp.photo_size.set((width, height));
+
+        if imp.video_mode.get() {
+            return Ok(());
+        }
+
+        session.stop_preview();
+        if let Err(error) = session.start_preview(PREVIEW_WIDTH, PREVIEW_HEIGHT, true) {
+            session.set_jpeg_size(old.0, old.1);
+            imp.photo_size.set(old);
+            if session
+                .start_preview(PREVIEW_WIDTH, PREVIEW_HEIGHT, true)
+                .is_err()
+            {
+                self.set_ready(false);
+                self.set_status(format!("Camera unavailable: {error}"));
+            }
+            return Err(error);
+        }
+
+        Ok(())
+    }
+
     fn open_camera<F>(&self, change: F) -> Result<CameraInfo, CameraError>
     where
         F: FnOnce(&mut CameraSession) -> Result<CameraInfo, CameraError>,
@@ -298,14 +402,17 @@ impl CameraView {
         let was_video = self.imp().video_mode.get();
         self.make_current();
 
+        let imp = self.imp();
         let result = {
-            let mut session = self.imp().session.borrow_mut();
+            let mut session = imp.session.borrow_mut();
             if was_video {
                 session.exit_video_mode();
                 session.release_recording();
             }
 
             change(&mut session).and_then(|info| {
+                apply_saved_photo_size(&imp.photo_size, &mut session);
+                apply_saved_jpeg_quality(&mut session);
                 if was_video {
                     match Self::start_video_preview(&mut session) {
                         Ok(sixteen) => {

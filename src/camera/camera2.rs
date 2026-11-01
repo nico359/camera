@@ -24,6 +24,13 @@ struct fc2_camera_info {
     sensor_orientation: c_int,
 }
 
+#[repr(C)]
+#[derive(Copy, Clone, Default)]
+struct fc2_size {
+    width: c_int,
+    height: c_int,
+}
+
 const FC2_FACING_BACK: c_int = 1;
 
 extern "C" {
@@ -92,6 +99,9 @@ extern "C" {
     fn fc2_clear_focus_assist(camera: *mut fc2_camera);
     fn fc2_set_torch(camera: *mut fc2_camera, on: c_int);
     fn fc2_set_flash_mode(camera: *mut fc2_camera, mode: c_int);
+    fn fc2_jpeg_sizes(camera: *mut fc2_camera, out: *mut fc2_size, max: c_int) -> c_int;
+    fn fc2_set_jpeg_size(camera: *mut fc2_camera, width: c_int, height: c_int);
+    fn fc2_set_jpeg_quality(camera: *mut fc2_camera, quality: c_int);
 }
 
 /// Stable allocation whose address is handed to the C API.  The `Arc` keeps
@@ -281,6 +291,33 @@ impl CameraBackend for Camera2Backend {
     fn stop_preview(&mut self) {
         if !self.raw.is_null() {
             unsafe { fc2_stop_preview(self.raw) };
+        }
+    }
+
+    fn jpeg_sizes(&self) -> Vec<(i32, i32)> {
+        if self.raw.is_null() {
+            return Vec::new();
+        }
+
+        let mut sizes = [fc2_size::default(); 64];
+        let count = unsafe { fc2_jpeg_sizes(self.raw, sizes.as_mut_ptr(), sizes.len() as c_int) };
+        let count = count.clamp(0, sizes.len() as c_int) as usize;
+        sizes[..count]
+            .iter()
+            .filter(|size| size.width > 0 && size.height > 0)
+            .map(|size| (size.width, size.height))
+            .collect()
+    }
+
+    fn set_jpeg_size(&mut self, width: i32, height: i32) {
+        if !self.raw.is_null() {
+            unsafe { fc2_set_jpeg_size(self.raw, width, height) };
+        }
+    }
+
+    fn set_jpeg_quality(&mut self, quality: i32) {
+        if !self.raw.is_null() {
+            unsafe { fc2_set_jpeg_quality(self.raw, quality) };
         }
     }
 

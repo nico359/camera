@@ -8,6 +8,7 @@
 #include "CameraSession.h"
 #include "PreviewRenderer.h"
 
+#include <algorithm>
 #include <atomic>
 #include <cstdio>
 #include <new>
@@ -213,6 +214,48 @@ void fc2_clear_focus_assist(fc2_camera* c)
 {
     if (c)
         c->session.clearFocusAssist();
+}
+
+int fc2_jpeg_sizes(fc2_camera* c, fc2_size* out, int max)
+{
+    if (!c || !out || max <= 0)
+        return 0;
+
+    auto sizes = c->session.jpegSizes();
+    std::sort(sizes.begin(), sizes.end(), [](const auto& a, const auto& b) {
+        const long areaA = (long)a.width * a.height;
+        const long areaB = (long)b.width * b.height;
+        if (areaA != areaB)
+            return areaA > areaB;
+        return a.width > b.width;
+    });
+    sizes.erase(std::unique(sizes.begin(), sizes.end(), [](const auto& a, const auto& b) {
+        return a.width == b.width && a.height == b.height;
+    }), sizes.end());
+
+    int n = 0;
+    for (const auto& s : sizes) {
+        if (s.width <= 0 || s.height <= 0)
+            continue;
+        if (n >= max)
+            break;
+        out[n].width = s.width;
+        out[n].height = s.height;
+        ++n;
+    }
+    return n;
+}
+
+void fc2_set_jpeg_size(fc2_camera* c, int width, int height)
+{
+    if (c)
+        c->session.setJpegSize(width, height);
+}
+
+void fc2_set_jpeg_quality(fc2_camera* c, int quality)
+{
+    if (c)
+        c->session.setJpegQuality(quality);
 }
 
 int fc2_capture_photo(fc2_camera* c, const char* path)

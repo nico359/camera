@@ -84,6 +84,17 @@ void  fc2_set_auto_exposure(fc2_camera* c);
 void  fc2_set_manual_exposure(fc2_camera* c, int iso, int64_t exposure_ns);
 void  fc2_set_focus_point(fc2_camera* c, float x, float y); /* normalized [0,1] */
 
+/* Still JPEG output sizes and quality.  Sizes are the camera's advertised
+ * output configurations; (0,0) requests the largest.  Quality is [1,100]. */
+typedef struct fc2_size {
+    int width;
+    int height;
+} fc2_size;
+
+int  fc2_jpeg_sizes(fc2_camera* c, fc2_size* out, int max);
+void fc2_set_jpeg_size(fc2_camera* c, int width, int height);
+void fc2_set_jpeg_quality(fc2_camera* c, int quality);
+
 /* AF-assist state used by tap-to-focus.  The frontend polls af_state() and
  * calls set_torch(false) + clear_focus_assist() once focus settles. */
 int  fc2_focus_assist_lit(fc2_camera* c);

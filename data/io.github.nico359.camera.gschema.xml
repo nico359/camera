@@ -6,5 +6,16 @@
 			<summary>Ask which application to use</summary>
 			<description>Show the application chooser when opening the last photo or video. When disabled, the default viewer is used.</description>
 		</key>
+		<key name="jpeg-quality" type="i">
+			<range min="70" max="100"/>
+			<default>95</default>
+			<summary>JPEG quality</summary>
+			<description>Still-image JPEG quality from 70 to 100. Higher values keep more detail and use more storage.</description>
+		</key>
+		<key name="photo-resolutions" type="a{ss}">
+			<default>{}</default>
+			<summary>Photo resolution per camera</summary>
+			<description>Maps camera IDs to a requested JPEG size in WIDTHxHEIGHT form. Missing entries use the camera's full resolution.</description>
+		</key>
 	</schema>
 </schemalist>

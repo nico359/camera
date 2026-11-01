@@ -265,8 +265,8 @@
   <menu id="primary_menu">
     <section>
       <item>
-        <attribute name="label" translatable="yes">_Ask Which App to Open Media</attribute>
-        <attribute name="action">win.ask-open-with</attribute>
+        <attribute name="label" translatable="yes">_Settings</attribute>
+        <attribute name="action">win.settings</attribute>
       </item>
     </section>
     <section>

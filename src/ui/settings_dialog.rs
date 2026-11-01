@@ -1,0 +1,157 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+//
+// Copyright 2026 nico359
+
+//! The window's Settings dialog: photo resolution, JPEG quality and the
+//! media-open preference.  These are deliberately separate from the controls
+//! that are changed while shooting (camera, flash, zoom, focus).
+
+use std::cell::Cell;
+use std::rc::Rc;
+
+use adw::prelude::*;
+use gettextrs::gettext;
+use gtk::StringList;
+
+use crate::settings::AppSettings;
+use crate::window::CameraWindow;
+
+fn megapixels_label(width: i32, height: i32) -> String {
+    let mp = (width as f64 * height as f64) / 1_000_000.0;
+    if mp >= 10.0 {
+        format!("{mp:.0} MP")
+    } else {
+        format!("{mp:.1} MP")
+    }
+}
+
+pub fn present(window: &CameraWindow) {
+    let view = window.camera_view();
+    let settings = AppSettings::new();
+
+    let page = adw::PreferencesPage::new();
+
+    let photo_group = adw::PreferencesGroup::new();
+    photo_group.set_title(&gettext("Photos"));
+
+    let sizes = view.photo_sizes();
+    let camera_label = view
+        .current_camera()
+        .map(|camera| camera.label)
+        .unwrap_or_else(|| gettext("Current camera"));
+
+    let resolution = adw::ComboRow::new();
+    resolution.set_title(&gettext("Photo Resolution"));
+    resolution.set_subtitle(&camera_label);
+
+    let saved_size = view
+        .current_camera_id()
+        .and_then(|id| settings.photo_size(&id));
+    let selected = saved_size
+        .and_then(|size| sizes.iter().position(|candidate| *candidate == size))
+        .unwrap_or(0) as u32;
+
+    if sizes.is_empty() {
+        let model = StringList::new(&[]);
+        model.append(&gettext("No photo sizes available"));
+        resolution.set_model(Some(&model));
+        resolution.set_selected(0);
+        resolution.set_subtitle(&gettext("No camera available"));
+        resolution.set_sensitive(false);
+    } else {
+        let model = StringList::new(&[]);
+        for (width, height) in &sizes {
+            model.append(&format!(
+                "{} ({} × {})",
+                megapixels_label(*width, *height),
+                width,
+                height
+            ));
+        }
+        resolution.set_model(Some(&model));
+        resolution.set_selected(selected);
+        resolution.set_sensitive(view.ready() && !view.is_recording());
+
+        let previous = Rc::new(Cell::new(selected));
+        let updating = Rc::new(Cell::new(false));
+        let previous_cb = Rc::clone(&previous);
+        let updating_cb = Rc::clone(&updating);
+        let view_cb = view.clone();
+        let settings_cb = settings.clone();
+        let sizes_cb = sizes.clone();
+        let weak = window.downgrade();
+        resolution.connect_selected_notify(move |row| {
+            if updating_cb.get() {
+                return;
+            }
+            let index = row.selected() as usize;
+            let Some(size) = sizes_cb.get(index).copied() else {
+                return;
+            };
+
+            match view_cb.set_photo_size(size.0, size.1) {
+                Ok(()) => {
+                    if let Some(id) = view_cb.current_camera_id() {
+                        let full_resolution = sizes_cb.first().copied() == Some(size);
+                        settings_cb
+                            .set_photo_size(&id, if full_resolution { None } else { Some(size) });
+                    }
+                    previous_cb.set(row.selected());
+                }
+                Err(error) => {
+                    updating_cb.set(true);
+                    row.set_selected(previous_cb.get());
+                    updating_cb.set(false);
+                    if let Some(window) = weak.upgrade() {
+                        window.show_toast(&format!(
+                            "{}: {error}",
+                            gettext("Could not change photo resolution")
+                        ));
+                    }
+                }
+            }
+        });
+    }
+    photo_group.add(&resolution);
+
+    let quality = adw::SpinRow::with_range(70.0, 100.0, 5.0);
+    quality.set_title(&gettext("JPEG Quality"));
+    quality.set_subtitle(&gettext(
+        "Higher values keep more detail and use more storage",
+    ));
+    quality.set_value(settings.jpeg_quality() as f64);
+    let settings_cb = settings.clone();
+    let view_cb = view.clone();
+    quality.connect_value_notify(move |row| {
+        let value = row.value().round() as i32;
+        settings_cb.set_jpeg_quality(value);
+        view_cb.set_jpeg_quality(value);
+    });
+    photo_group.add(&quality);
+
+    page.add(&photo_group);
+
+    let media_group = adw::PreferencesGroup::new();
+    media_group.set_title(&gettext("Media"));
+
+    let open_with = adw::SwitchRow::new();
+    open_with.set_title(&gettext("Ask Which App to Open Media"));
+    open_with.set_subtitle(&gettext(
+        "Show the app chooser instead of the default viewer",
+    ));
+    open_with.set_active(settings.open_with_dialog());
+    settings
+        .gio()
+        .bind("open-with-dialog", &open_with, "active")
+        .build();
+    media_group.add(&open_with);
+    page.add(&media_group);
+
+    let dialog = adw::PreferencesDialog::builder()
+        .title(&gettext("Settings"))
+        .content_width(360)
+        .search_enabled(false)
+        .build();
+    dialog.add(&page);
+    dialog.present(Some(window));
+}

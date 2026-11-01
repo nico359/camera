@@ -23,6 +23,7 @@ mod camera;
 mod config;
 mod device_rotation;
 mod media;
+mod settings;
 mod ui;
 mod window;
 
@@ -31,8 +32,8 @@ use self::window::CameraWindow;
 
 use config::{GETTEXT_PACKAGE, LOCALEDIR, PKGDATADIR};
 use gettextrs::{bind_textdomain_codeset, bindtextdomain, textdomain};
-use gtk::{gio, glib};
 use gtk::prelude::*;
+use gtk::{gio, glib};
 
 fn main() -> glib::ExitCode {
     // Set up gettext translations

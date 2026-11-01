@@ -233,30 +233,14 @@ mod imp {
             });
             window.add_action(&last_media);
 
-            let settings = gio::Settings::new("io.github.nico359.camera");
-            let ask_open_with = gio::SimpleAction::new_stateful(
-                "ask-open-with",
-                None,
-                &settings.boolean("open-with-dialog").to_variant(),
-            );
-            let settings = settings.clone();
+            let settings_action = gio::SimpleAction::new("settings", None);
             let weak = window.downgrade();
-            ask_open_with.connect_change_state(move |action, value| {
-                let Some(value) = value.and_then(|value| value.get::<bool>()) else {
-                    return;
-                };
-                let _ = settings.set_boolean("open-with-dialog", value);
-                action.set_state(&value.to_variant());
+            settings_action.connect_activate(move |_, _| {
                 if let Some(window) = weak.upgrade() {
-                    let message = if value {
-                        gettext("Media will open with an app chooser")
-                    } else {
-                        gettext("Media will open in the default viewer")
-                    };
-                    window.show_toast(&message);
+                    window.show_settings();
                 }
             });
-            window.add_action(&ask_open_with);
+            window.add_action(&settings_action);
 
             if let Some(application) = window.application() {
                 application.set_accels_for_action("win.capture", &["space"]);
@@ -265,6 +249,7 @@ mod imp {
                 application.set_accels_for_action("win.zoom-in", &["plus", "equal"]);
                 application.set_accels_for_action("win.zoom-out", &["minus"]);
                 application.set_accels_for_action("win.focus-center", &["f"]);
+                application.set_accels_for_action("win.settings", &["<primary>comma"]);
             }
 
             *self.capture_action.borrow_mut() = Some(capture);
@@ -419,6 +404,14 @@ impl CameraWindow {
         glib::Object::builder()
             .property("application", application)
             .build()
+    }
+
+    pub fn camera_view(&self) -> CameraView {
+        self.imp().camera_view.get()
+    }
+
+    fn show_settings(&self) {
+        crate::ui::present_settings(self);
     }
 
     fn shutter(&self) {
@@ -932,7 +925,7 @@ impl CameraWindow {
         });
     }
 
-    fn show_toast(&self, message: &str) {
+    pub(crate) fn show_toast(&self, message: &str) {
         self.imp().toast_overlay.add_toast(adw::Toast::new(message));
     }
 
