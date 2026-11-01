@@ -35,3 +35,14 @@
 .camera-header .flash-torch {
   color: #f6d32d;
 }
+
+.media-tile {
+  background: alpha(currentColor, 0.08);
+  border-radius: 8px;
+  padding: 4px;
+}
+
+.media-thumb {
+  background: #000000;
+  border-radius: 6px;
+}

@@ -21,10 +21,12 @@ inside a Flatpak. Feature parity with FuriCam or at least close to it is planned
   JPEG stream; on the FuriPhone this is 5152×3864)
 - asynchronous capture feedback: the UI reports when the JPEG is actually
   written, not when the request is submitted
-- a last-media thumbnail that opens through the system OpenURI portal; the
-  first open may show the app chooser, after which the portal remembers the
-  choice per content type. The “Ask Which App to Open Media” switch in Settings
-  forces the chooser again
+- a read-only media gallery: the last-media thumbnail and the hamburger Gallery
+  item open a thumbnail grid of photos and videos from the Camera folders.
+  Photos open in an in-app viewer; videos show a placeholder and open in the
+  system player. The viewer has an “Open Externally” button. The “Ask Which App
+  to Open Media” switch in Settings forces the portal app chooser for external
+  opens
 - black preview canvas and header bar; the preview sits above a dedicated
   control bar, so it is centered between the header and the shutter row rather
   than behind the controls
@@ -51,8 +53,8 @@ inside a Flatpak. Feature parity with FuriCam or at least close to it is planned
   map to the camera's JPEG quality 100/70/40/20; they are deliberately names
   rather than percentages because the HAL chooses the actual compression, and
   the JPEG is written by the HAL directly without an on-disk re-encode
-- video files are written to `~/Videos/Camera/VID_*.mp4`; the thumbnail opens
-  photos or videos through the system portal
+- video files are written to `~/Videos/Camera/VID_*.mp4`; the gallery shows
+  them alongside photos, and external opening uses the system portal
 - device-rotation-aware still capture through iio-sensor-proxy
 - flip (front/back) button in the bottom row beside the shutter, and a camera
   picker in the header that includes every enumerated camera, including the
@@ -64,9 +66,9 @@ inside a Flatpak. Feature parity with FuriCam or at least close to it is planned
 
 Not implemented yet:
 
-- gallery, HDR, RAW, and the manual exposure/ISO/shutter “pro” controls. The
-  engine already exposes most of these through its C API; the UI is the
-  remaining work.
+- richer gallery features (delete/share, in-app video playback), HDR, RAW, and
+  the manual exposure/ISO/shutter “pro” controls. The engine already exposes
+  most of these through its C API; the UI is the remaining work.
 
 Known limitations:
 

@@ -157,12 +157,10 @@ mod imp {
         #[template_child]
         pub toast_overlay: TemplateChild<adw::ToastOverlay>,
 
-        pub(super) last_media_path: RefCell<Option<PathBuf>>,
         pub(super) capture_action: RefCell<Option<gio::SimpleAction>>,
         pub(super) switch_action: RefCell<Option<gio::SimpleAction>>,
         pub(super) select_action: RefCell<Option<gio::SimpleAction>>,
         pub(super) video_mode_action: RefCell<Option<gio::SimpleAction>>,
-        pub(super) last_media_action: RefCell<Option<gio::SimpleAction>>,
         pub(super) flash_mode: Cell<i32>,
         pub(super) recording_started: Cell<Option<Instant>>,
         pub(super) recording_tick: RefCell<Option<glib::SourceId>>,
@@ -353,15 +351,14 @@ mod imp {
             });
             window.add_action(&focus_center);
 
-            let last_media = gio::SimpleAction::new("open-last-media", None);
-            last_media.set_enabled(false);
+            let gallery = gio::SimpleAction::new("gallery", None);
             let weak = window.downgrade();
-            last_media.connect_activate(move |_, _| {
+            gallery.connect_activate(move |_, _| {
                 if let Some(window) = weak.upgrade() {
-                    window.open_last_media();
+                    window.show_gallery();
                 }
             });
-            window.add_action(&last_media);
+            window.add_action(&gallery);
 
             let settings_action = gio::SimpleAction::new("settings", None);
             let weak = window.downgrade();
@@ -386,7 +383,6 @@ mod imp {
             *self.switch_action.borrow_mut() = Some(switch);
             *self.select_action.borrow_mut() = Some(select);
             *self.video_mode_action.borrow_mut() = Some(video_mode);
-            *self.last_media_action.borrow_mut() = Some(last_media);
         }
 
         fn setup_status(&self) {
@@ -547,6 +543,10 @@ impl CameraWindow {
 
     fn show_settings(&self) {
         crate::ui::present_settings(self);
+    }
+
+    pub(crate) fn show_gallery(&self) {
+        crate::ui::present_gallery(self);
     }
 
     fn shutter(&self) {
@@ -1004,10 +1004,6 @@ impl CameraWindow {
                 .last_media_stack
                 .set_visible_child(&self.imp().last_video_icon.get());
             self.imp().last_photo_button.set_visible(true);
-            *self.imp().last_media_path.borrow_mut() = Some(path.to_path_buf());
-            if let Some(action) = self.imp().last_media_action.borrow().as_ref() {
-                action.set_enabled(true);
-            }
             return;
         }
 
@@ -1019,10 +1015,6 @@ impl CameraWindow {
                     .last_media_stack
                     .set_visible_child(&self.imp().last_photo_picture.get());
                 self.imp().last_photo_button.set_visible(true);
-                *self.imp().last_media_path.borrow_mut() = Some(path.to_path_buf());
-                if let Some(action) = self.imp().last_media_action.borrow().as_ref() {
-                    action.set_enabled(true);
-                }
             }
             Err(error) => eprintln!("thumbnail for {}: {error}", path.display()),
         }
@@ -1032,32 +1024,6 @@ impl CameraWindow {
         if let Some(path) = crate::media::latest_media() {
             self.update_media_thumbnail(&path);
         }
-    }
-
-    fn open_last_media(&self) {
-        let Some(path) = self.imp().last_media_path.borrow().clone() else {
-            return;
-        };
-        if !path.exists() {
-            self.show_toast(&gettext("Media not found"));
-            return;
-        }
-
-        let settings = gio::Settings::new("io.github.nico359.camera");
-        let ask = settings.boolean("open-with-dialog");
-
-        let file = gio::File::for_path(&path);
-        let launcher = gtk::FileLauncher::new(Some(&file));
-        launcher.set_always_ask(ask);
-
-        let weak = self.downgrade();
-        launcher.launch(Some(self), None::<&gio::Cancellable>, move |result| {
-            if let Err(error) = result {
-                if let Some(window) = weak.upgrade() {
-                    window.show_toast(&format!("{}: {error}", gettext("Could not open media")));
-                }
-            }
-        });
     }
 
     pub(crate) fn show_toast(&self, message: &str) {

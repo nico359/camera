@@ -176,11 +176,11 @@
                             <child>
                               <object class="GtkButton" id="last_photo_button">
                                 <property name="visible">False</property>
-                                <property name="action-name">win.open-last-media</property>
+                                <property name="action-name">win.gallery</property>
                                 <property name="width-request">56</property>
                                 <property name="height-request">56</property>
                                 <property name="valign">center</property>
-                                <property name="tooltip-text" translatable="yes">Open Last Photo or Video</property>
+                                <property name="tooltip-text" translatable="yes">Open Gallery</property>
                                 <style>
                                   <class name="flat"/>
                                 </style>
@@ -283,6 +283,12 @@
     </property>
   </template>
   <menu id="primary_menu">
+    <section>
+      <item>
+        <attribute name="label" translatable="yes">_Gallery</attribute>
+        <attribute name="action">win.gallery</attribute>
+      </item>
+    </section>
     <section>
       <item>
         <attribute name="label" translatable="yes">_Settings</attribute>
