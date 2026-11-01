@@ -22,5 +22,24 @@
 			<summary>Photo resolution per camera</summary>
 			<description>Maps camera IDs to a requested JPEG size in WIDTHxHEIGHT form. Missing entries use the camera's full resolution.</description>
 		</key>
+		<key name="show-grid" type="b">
+			<default>false</default>
+			<summary>Show 3x3 grid</summary>
+			<description>Draw a 3x3 composition grid over the preview.</description>
+		</key>
+		<key name="video-resolution" type="s">
+			<choices>
+				<choice value="1920x1080"/>
+				<choice value="3840x2160"/>
+			</choices>
+			<default>'1920x1080'</default>
+			<summary>Video resolution</summary>
+			<description>Video recording size. 4K may not be supported reliably by every camera.</description>
+		</key>
+		<key name="video-stabilization" type="b">
+			<default>false</default>
+			<summary>Video stabilization</summary>
+			<description>Enable the camera's electronic video stabilization (EIS) when supported. EIS crops the video field of view.</description>
+		</key>
 	</schema>
 </schemalist>

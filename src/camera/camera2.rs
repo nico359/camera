@@ -88,6 +88,7 @@ extern "C" {
     fn fc2_release_recording(camera: *mut fc2_camera);
     fn fc2_is_recording(camera: *mut fc2_camera) -> c_int;
     fn fc2_recording_write_failed(camera: *mut fc2_camera) -> c_int;
+    fn fc2_set_video_stabilization(camera: *mut fc2_camera, on: c_int);
     fn fc2_set_photo_callback(
         camera: *mut fc2_camera,
         callback: Option<extern "C" fn(*mut c_void, *const c_char, c_int)>,
@@ -434,6 +435,12 @@ impl CameraBackend for Camera2Backend {
 
     fn recording_write_failed(&self) -> bool {
         !self.raw.is_null() && unsafe { fc2_recording_write_failed(self.raw) } != 0
+    }
+
+    fn set_video_stabilization(&mut self, on: bool) {
+        if !self.raw.is_null() {
+            unsafe { fc2_set_video_stabilization(self.raw, on as c_int) };
+        }
     }
 
     fn max_zoom(&self) -> f32 {

@@ -312,5 +312,10 @@ int  fc2_recording_write_failed(fc2_camera* c)
 {
     return (c && c->session.recordingWriteFailed()) ? 1 : 0;
 }
+void fc2_set_video_stabilization(fc2_camera* c, int on)
+{
+    if (c)
+        c->session.setVideoStabilization(on != 0);
+}
 
 } // extern "C"

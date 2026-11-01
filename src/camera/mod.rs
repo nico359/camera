@@ -117,6 +117,7 @@ pub trait CameraBackend {
     fn stop_recording(&mut self);
     fn is_recording(&self) -> bool;
     fn recording_write_failed(&self) -> bool;
+    fn set_video_stabilization(&mut self, on: bool);
     fn set_device_rotation(&mut self, degrees: i32);
     fn set_preview_mirror(&mut self, mirror: bool);
     fn max_zoom(&self) -> f32;
@@ -406,6 +407,12 @@ impl CameraSession {
             .as_ref()
             .map(|backend| backend.recording_write_failed())
             .unwrap_or(false)
+    }
+
+    pub fn set_video_stabilization(&mut self, on: bool) {
+        if let Some(backend) = self.backend.as_mut() {
+            backend.set_video_stabilization(on);
+        }
     }
 
     pub fn max_zoom(&self) -> f32 {

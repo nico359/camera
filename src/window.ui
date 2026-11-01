@@ -66,9 +66,22 @@
                     <property name="hexpand">True</property>
                     <property name="vexpand">True</property>
                     <property name="child">
-                      <object class="CameraView" id="camera_view">
+                      <object class="GtkOverlay">
                         <property name="hexpand">True</property>
                         <property name="vexpand">True</property>
+                        <property name="child">
+                          <object class="CameraView" id="camera_view">
+                            <property name="hexpand">True</property>
+                            <property name="vexpand">True</property>
+                          </object>
+                        </property>
+                        <child type="overlay">
+                          <object class="GtkDrawingArea" id="grid_overlay">
+                            <property name="can-target">False</property>
+                            <property name="hexpand">True</property>
+                            <property name="vexpand">True</property>
+                          </object>
+                        </child>
                       </object>
                     </property>
                   </object>

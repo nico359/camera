@@ -119,6 +119,39 @@ impl AppSettings {
             .settings
             .set_value("photo-resolutions", &map.to_variant());
     }
+
+    pub fn show_grid(&self) -> bool {
+        self.settings.boolean("show-grid")
+    }
+
+    pub fn video_size(&self) -> (i32, i32) {
+        parse_size(&self.settings.string("video-resolution")).unwrap_or((1920, 1080))
+    }
+
+    pub fn set_video_size(&self, width: i32, height: i32) {
+        let _ = self
+            .settings
+            .set_string("video-resolution", &format!("{width}x{height}"));
+    }
+
+    /// Match FuriCam's per-resolution bitrate floor.
+    pub fn video_bitrate(&self, width: i32) -> i32 {
+        if width >= 3000 {
+            40_000_000
+        } else if width >= 1920 {
+            20_000_000
+        } else {
+            10_000_000
+        }
+    }
+
+    pub fn video_stabilization(&self) -> bool {
+        self.settings.boolean("video-stabilization")
+    }
+
+    pub fn set_video_stabilization(&self, on: bool) {
+        let _ = self.settings.set_boolean("video-stabilization", on);
+    }
 }
 
 fn parse_size(value: &str) -> Option<(i32, i32)> {

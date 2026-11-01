@@ -118,6 +118,7 @@ int  fc2_prepare_recording(fc2_camera* c);   /* warm the mic; 1 on success */
 void fc2_release_recording(fc2_camera* c);
 int  fc2_is_recording(fc2_camera* c);
 int  fc2_recording_write_failed(fc2_camera* c);
+void fc2_set_video_stabilization(fc2_camera* c, int on);
 
 /* Result of a still capture.  Called on a camera thread after the JPEG has
  * been written (or after the write failed).  `ok` is 1 on success. */

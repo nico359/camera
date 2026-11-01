@@ -177,6 +177,81 @@ pub fn present(window: &CameraWindow) {
 
     page.add(&photo_group);
 
+    let composition_group = adw::PreferencesGroup::new();
+    composition_group.set_title(&gettext("Composition"));
+
+    let grid = adw::SwitchRow::new();
+    grid.set_title(&gettext("Show 3×3 Grid"));
+    grid.set_subtitle(&gettext("Composition guide over the preview"));
+    grid.set_active(settings.show_grid());
+    settings.gio().bind("show-grid", &grid, "active").build();
+    composition_group.add(&grid);
+    page.add(&composition_group);
+
+    let video_group = adw::PreferencesGroup::new();
+    video_group.set_title(&gettext("Video"));
+
+    let video_resolution = adw::ComboRow::new();
+    video_resolution.set_title(&gettext("Video Resolution"));
+    video_resolution.set_subtitle(&gettext("4K may be unstable"));
+    let video_model = StringList::new(&[]);
+    video_model.append(&gettext("1080p"));
+    video_model.append(&gettext("4K"));
+    video_resolution.set_model(Some(&video_model));
+    let video_selected = if settings.video_size().0 >= 3000 {
+        1
+    } else {
+        0
+    };
+    video_resolution.set_selected(video_selected);
+    video_resolution.set_sensitive(!view.is_recording());
+    let weak = window.downgrade();
+    let view_cb = view.clone();
+    let settings_cb = settings.clone();
+    video_resolution.connect_selected_notify(move |row| {
+        let (width, height) = if row.selected() == 1 {
+            (3840, 2160)
+        } else {
+            (1920, 1080)
+        };
+        settings_cb.set_video_size(width, height);
+        if let Some(window) = weak.upgrade() {
+            if let Err(error) = view_cb.apply_video_settings() {
+                window.show_toast(&format!(
+                    "{}: {error}",
+                    gettext("Could not change video resolution")
+                ));
+            }
+            window.update_mode_ui();
+            window.update_preview_aspect();
+        }
+    });
+    video_group.add(&video_resolution);
+
+    let stabilization = adw::SwitchRow::new();
+    stabilization.set_title(&gettext("Video Stabilization (EIS)"));
+    stabilization.set_subtitle(&gettext("Off gives a wider field of view"));
+    stabilization.set_active(settings.video_stabilization());
+    stabilization.set_sensitive(!view.is_recording());
+    let weak = window.downgrade();
+    let view_cb = view.clone();
+    let settings_cb = settings.clone();
+    stabilization.connect_active_notify(move |row| {
+        settings_cb.set_video_stabilization(row.is_active());
+        if let Some(window) = weak.upgrade() {
+            if let Err(error) = view_cb.apply_video_settings() {
+                window.show_toast(&format!(
+                    "{}: {error}",
+                    gettext("Could not change video stabilization")
+                ));
+            }
+            window.update_mode_ui();
+            window.update_preview_aspect();
+        }
+    });
+    video_group.add(&stabilization);
+    page.add(&video_group);
+
     let media_group = adw::PreferencesGroup::new();
     media_group.set_title(&gettext("Media"));
 

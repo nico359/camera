@@ -27,7 +27,23 @@ use adw::subclass::prelude::*;
 use gettextrs::gettext;
 use gtk::{gio, glib};
 
+use crate::settings::AppSettings;
 use crate::ui::CameraView;
+
+/// 3x3 composition grid, drawn over the preview image itself.
+fn draw_grid(cr: &gtk::cairo::Context, width: f64, height: f64) {
+    for i in 1..3 {
+        let x = width * i as f64 / 3.0;
+        cr.move_to(x, 0.0);
+        cr.line_to(x, height);
+        let _ = cr.stroke();
+
+        let y = height * i as f64 / 3.0;
+        cr.move_to(0.0, y);
+        cr.line_to(width, y);
+        let _ = cr.stroke();
+    }
+}
 
 mod imp {
     use super::*;
@@ -40,6 +56,9 @@ mod imp {
 
         #[template_child]
         pub preview_frame: TemplateChild<gtk::AspectFrame>,
+
+        #[template_child]
+        pub grid_overlay: TemplateChild<gtk::DrawingArea>,
 
         #[template_child]
         pub preview_overlay: TemplateChild<gtk::Overlay>,
@@ -128,6 +147,7 @@ mod imp {
             self.setup_actions();
             self.setup_status();
             self.setup_gestures();
+            self.setup_grid();
             self.obj().load_latest_media();
         }
     }
@@ -138,6 +158,26 @@ mod imp {
     impl AdwApplicationWindowImpl for CameraWindow {}
 
     impl CameraWindow {
+        fn setup_grid(&self) {
+            let grid = self.grid_overlay.get();
+            grid.set_draw_func(|_, cr, width, height| {
+                let width = width as f64;
+                let height = height as f64;
+
+                cr.set_source_rgba(0.0, 0.0, 0.0, 0.35);
+                cr.set_line_width(2.0);
+                draw_grid(cr, width, height);
+
+                cr.set_source_rgba(1.0, 1.0, 1.0, 0.55);
+                cr.set_line_width(1.0);
+                draw_grid(cr, width, height);
+            });
+
+            let settings = AppSettings::new();
+            grid.set_visible(settings.show_grid());
+            settings.gio().bind("show-grid", &grid, "visible").build();
+        }
+
         fn setup_actions(&self) {
             let window = self.obj();
 
@@ -452,7 +492,7 @@ impl CameraWindow {
         }
     }
 
-    fn update_mode_ui(&self) {
+    pub(crate) fn update_mode_ui(&self) {
         let imp = self.imp();
         let view = imp.camera_view.get();
         let ready = view.ready();

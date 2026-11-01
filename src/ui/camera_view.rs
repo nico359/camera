@@ -21,12 +21,20 @@ use crate::settings::AppSettings;
 
 const PREVIEW_WIDTH: i32 = 1280;
 const PREVIEW_HEIGHT: i32 = 960;
-const VIDEO_WIDTH: i32 = 1920;
-const VIDEO_HEIGHT: i32 = 1080;
 const VIDEO_PREVIEW_WIDTH: i32 = 1280;
 const VIDEO_PREVIEW_HEIGHT: i32 = 720;
 const VIDEO_FPS: i32 = 30;
-const VIDEO_BITRATE: i32 = 20_000_000;
+
+fn video_settings() -> (i32, i32, i32, bool) {
+    let settings = AppSettings::new();
+    let (width, height) = settings.video_size();
+    (
+        width,
+        height,
+        settings.video_bitrate(width),
+        settings.video_stabilization(),
+    )
+}
 
 /// All advertised still sizes, largest first.  The preview crop follows the
 /// selected size's aspect, so 4:3, 16:9, 1:1 and other ratios are all valid.
@@ -520,6 +528,9 @@ impl CameraView {
     }
 
     fn start_video_preview(session: &mut CameraSession) -> Result<bool, CameraError> {
+        let (video_width, video_height, bitrate, stabilization) = video_settings();
+        session.set_video_stabilization(stabilization);
+
         // Video mode does not need the full-resolution JPEG output.  Start a
         // still-capture-free 16:9 preview; that removes one heavy stream and
         // lets the HAL deliver frames at the requested rate.
@@ -535,8 +546,7 @@ impl CameraView {
             return Err(CameraError::PreviewFailed);
         }
 
-        if let Err(error) =
-            session.enter_video_mode(VIDEO_WIDTH, VIDEO_HEIGHT, VIDEO_FPS, VIDEO_BITRATE)
+        if let Err(error) = session.enter_video_mode(video_width, video_height, VIDEO_FPS, bitrate)
         {
             let _ = Self::restore_photo_preview(session);
             return Err(error);
@@ -556,6 +566,34 @@ impl CameraView {
         self.imp().video_mode.get()
     }
 
+    /// Rebuild the video session with the current resolution/EIS settings.
+    /// In photo mode this is a no-op; the choice is used when video mode starts.
+    pub fn apply_video_settings(&self) -> Result<(), CameraError> {
+        if !self.imp().video_mode.get() {
+            return Ok(());
+        }
+        if self.imp().session.borrow().is_recording() {
+            return Err(CameraError::Busy);
+        }
+
+        self.make_current();
+        let mut session = self.imp().session.borrow_mut();
+        session.exit_video_mode();
+        session.release_recording();
+        match Self::start_video_preview(&mut session) {
+            Ok(sixteen) => {
+                self.imp().video_preview_16_9.set(sixteen);
+                self.imp().video_mode.set(true);
+                Ok(())
+            }
+            Err(error) => {
+                self.imp().video_mode.set(false);
+                self.imp().video_preview_16_9.set(false);
+                Err(error)
+            }
+        }
+    }
+
     pub fn is_recording(&self) -> bool {
         self.imp().session.borrow().is_recording()
     }
@@ -566,7 +604,8 @@ impl CameraView {
         }
         self.make_current();
         let mut session = self.imp().session.borrow_mut();
-        session.start_recording(path, VIDEO_WIDTH, VIDEO_HEIGHT, VIDEO_FPS, VIDEO_BITRATE)?;
+        let (video_width, video_height, bitrate, _) = video_settings();
+        session.start_recording(path, video_width, video_height, VIDEO_FPS, bitrate)?;
         Ok(())
     }
 
