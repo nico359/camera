@@ -8,8 +8,8 @@
   <summary>Take photos and videos on Linux phones</summary>
   <description>
     <p>Camera is a GTK4 and libadwaita camera application for FuriOS and other Halium-based Linux phones. It uses the FuriCam Camera2 engine for a real viewfinder, full-resolution photos and hardware-encoded video inside a Flatpak.</p>
-    <p>The 0.1.0 release includes live preview, full-resolution JPEG capture, 1080p H.264 video with AAC audio, front/back and secondary camera switching, pinch zoom, tap-to-focus, and Off/On/Torch flash control.</p>
-    <p>Photos and videos are saved to the standard Pictures/Camera and Videos/Camera folders. The last-media thumbnail opens the system viewer through the OpenURI portal.</p>
+    <p>Version 0.2.0 adds a settings dialog with per-camera photo resolutions and JPEG quality tiers, 1080p or experimental 4K H.264 video with optional stabilization, a 3×3 composition grid and a rotating level line driven by the phone’s accelerometer.</p>
+    <p>Photos and videos are saved to the standard Pictures/Camera and Videos/Camera folders. A full-window gallery browses them with horizontal swipes and plays videos in-app; the last-media thumbnail can instead open the latest item in the system viewer.</p>
   </description>
 
   <icon type="stock">io.github.nico359.camera</icon>
@@ -54,11 +54,11 @@
   <screenshots>
     <screenshot type="default">
       <caption>Photo mode</caption>
-      <image>https://raw.githubusercontent.com/nico359/camera/v0.1.0/data/screenshot-photo.png</image>
+      <image>https://raw.githubusercontent.com/nico359/camera/v0.2.0/data/screenshot-photo.png</image>
     </screenshot>
     <screenshot>
       <caption>Video mode</caption>
-      <image>https://raw.githubusercontent.com/nico359/camera/v0.1.0/data/screenshot-video.png</image>
+      <image>https://raw.githubusercontent.com/nico359/camera/v0.2.0/data/screenshot-video.png</image>
     </screenshot>
   </screenshots>
 
@@ -70,6 +70,18 @@
   <content_rating type="oars-1.1" />
 
   <releases>
+    <release version="0.2.0" date="2026-11-01" type="stable">
+      <description translate="no">
+        <p>Settings and media browsing release.</p>
+        <ul>
+          <li>Settings dialog with per-camera photo resolutions, JPEG quality tiers, video resolution and video stabilization</li>
+          <li>3×3 composition grid and a rotating level line driven by the phone’s accelerometer</li>
+          <li>Full-window media gallery with horizontal swipe navigation and in-app video playback</li>
+          <li>Optional external opening from the last-media thumbnail, with an app-chooser preference</li>
+          <li>1080p H.264 recording with AAC audio; 4K remains experimental</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.1.0" date="2026-10-31" type="stable">
       <description translate="no">
         <p>First milestone release.</p>

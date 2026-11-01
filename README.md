@@ -4,9 +4,9 @@ A GTK4/libadwaita camera application for FuriOS and other Halium-based Linux
 phones (maybe, the only other phone I can test is the Pixel 3a running Droidian and it doesn't work there).
 
 Camera drives the [FuriCam](https://github.com/nico359/furicam) Camera2 engine
-from a native GTK4 frontend. The 0.1.0 milestone proves the stack end to end:
-a real Camera2 viewfinder, full-resolution stills and hardware-encoded video
-inside a Flatpak. Feature parity with FuriCam or at least close to it is planned. Might abandon FuriCam for this at some point because furios-camera will keep developing as well but let's see.
+from a native GTK4 frontend. The 0.2.0 milestone proves the stack end to end:
+a real Camera2 viewfinder, full-resolution stills, hardware-encoded video,
+settings, a rotating level and an in-app media gallery inside a Flatpak. Feature parity with FuriCam or at least close to it is planned. Might abandon FuriCam for this at some point because furios-camera will keep developing as well but let's see.
 
 <p>
   <img src="data/screenshot-photo.png" width="240" alt="Photo mode">
@@ -71,9 +71,10 @@ inside a Flatpak. Feature parity with FuriCam or at least close to it is planned
 
 Not implemented yet:
 
-- richer gallery features (delete/share), HDR, RAW, and the manual
-  exposure/ISO/shutter “pro” controls. The engine already exposes most of these
-  through its C API; the UI is the remaining work.
+- richer gallery features (delete/share, pinch/double-tap zoom, cached video
+  poster frames), HDR, RAW, and the manual exposure/ISO/shutter “pro” controls.
+  The engine already exposes most of these through its C API; the UI is the
+  remaining work.
 
 Known limitations:
 
