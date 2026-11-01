@@ -189,7 +189,7 @@ pub fn present(window: &CameraWindow) {
 
     let level = adw::SwitchRow::new();
     level.set_title(&gettext("Show Level"));
-    level.set_subtitle(&gettext("Bubble level from the accelerometer"));
+    level.set_subtitle(&gettext("Rotating level line from the accelerometer"));
     level.set_active(settings.show_level());
     settings.gio().bind("show-level", &level, "active").build();
     composition_group.add(&level);
@@ -273,6 +273,16 @@ pub fn present(window: &CameraWindow) {
         .bind("open-with-dialog", &open_with, "active")
         .build();
     media_group.add(&open_with);
+
+    let thumbnail_external = adw::SwitchRow::new();
+    thumbnail_external.set_title(&gettext("Open Thumbnail Externally"));
+    thumbnail_external.set_subtitle(&gettext("Otherwise the built-in gallery opens"));
+    thumbnail_external.set_active(settings.thumbnail_opens_external());
+    settings
+        .gio()
+        .bind("thumbnail-opens-external", &thumbnail_external, "active")
+        .build();
+    media_group.add(&thumbnail_external);
     page.add(&media_group);
 
     let dialog = adw::PreferencesDialog::builder()

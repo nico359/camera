@@ -36,13 +36,14 @@
   color: #f6d32d;
 }
 
-.media-tile {
-  background: alpha(currentColor, 0.08);
-  border-radius: 8px;
-  padding: 4px;
+.gallery-viewer {
+  background: #000000;
 }
 
-.media-thumb {
+.gallery-page {
   background: #000000;
-  border-radius: 6px;
+}
+
+.gallery-video {
+  background: #000000;
 }

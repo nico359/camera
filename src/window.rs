@@ -47,48 +47,47 @@ fn draw_grid(cr: &gtk::cairo::Context, width: f64, height: f64) {
     }
 }
 
-/// Bubble level. `angle` is the roll error in degrees relative to the nearest
-/// 90° orientation; the bubble is green when within 1.5°.
+fn draw_level_segments(cr: &gtk::cairo::Context, half: f64, gap: f64) {
+    cr.move_to(-half, 0.0);
+    cr.line_to(-gap, 0.0);
+    let _ = cr.stroke();
+
+    cr.move_to(gap, 0.0);
+    cr.line_to(half, 0.0);
+    let _ = cr.stroke();
+}
+
+/// FuriCam-style rotating level line. `angle` is the absolute roll angle from
+/// the accelerometer; the line turns with the device and is green when within
+/// 1.5° of horizontal in any of the four orientations.
 fn draw_level(cr: &gtk::cairo::Context, width: f64, height: f64, angle: f64) {
     let center_x = width / 2.0;
     let center_y = height / 2.0;
-    let half = (width * 0.32).min(150.0);
-    let offset = (angle * (half / 30.0)).clamp(-half, half);
-    let level = angle.abs() < 1.5;
+    let half = (width * 0.18).min(90.0);
+    let gap = 6.0;
+
+    let normalized = angle.rem_euclid(360.0);
+    let nearest = (normalized / 90.0).round() * 90.0;
+    let error = (normalized - nearest).abs();
+    let level = error < 1.5 || (360.0 - error) < 1.5;
+
+    let _ = cr.save();
+    cr.translate(center_x, center_y);
+    cr.rotate(angle.to_radians());
 
     cr.set_source_rgba(0.0, 0.0, 0.0, 0.35);
-    cr.set_line_width(2.0);
-    cr.move_to(center_x - half, center_y);
-    cr.line_to(center_x + half, center_y);
-    let _ = cr.stroke();
-
-    cr.set_source_rgba(1.0, 1.0, 1.0, 0.55);
-    cr.set_line_width(1.0);
-    cr.move_to(center_x - half, center_y);
-    cr.line_to(center_x + half, center_y);
-    let _ = cr.stroke();
-
-    cr.move_to(center_x, center_y - 6.0);
-    cr.line_to(center_x, center_y + 6.0);
-    let _ = cr.stroke();
-
-    let bubble_x = center_x + offset;
-    cr.set_source_rgba(0.0, 0.0, 0.0, 0.5);
-    cr.arc(bubble_x, center_y, 9.0, 0.0, std::f64::consts::TAU);
-    let _ = cr.fill();
+    cr.set_line_width(4.0);
+    draw_level_segments(cr, half, gap);
 
     if level {
         cr.set_source_rgba(0.2, 0.82, 0.4, 0.95);
     } else {
-        cr.set_source_rgba(1.0, 1.0, 1.0, 0.9);
+        cr.set_source_rgba(1.0, 1.0, 1.0, 0.65);
     }
-    cr.arc(bubble_x, center_y, 7.0, 0.0, std::f64::consts::TAU);
-    let _ = cr.fill();
+    cr.set_line_width(2.0);
+    draw_level_segments(cr, half, gap);
 
-    cr.set_source_rgba(0.0, 0.0, 0.0, 0.6);
-    cr.set_line_width(1.0);
-    cr.arc(bubble_x, center_y, 7.0, 0.0, std::f64::consts::TAU);
-    let _ = cr.stroke();
+    let _ = cr.restore();
 }
 
 mod imp {
@@ -238,9 +237,16 @@ mod imp {
 
             let level_draw = level.clone();
             let angle_cb = Rc::clone(&angle);
-            let sensor = Rc::new(LevelSensor::new(move |error| {
-                let smoothed = angle_cb.get() * 0.75 + error * 0.25;
-                angle_cb.set(smoothed);
+            let sensor = Rc::new(LevelSensor::new(move |reading| {
+                let current = angle_cb.get();
+                let mut delta = reading - current;
+                while delta > 180.0 {
+                    delta -= 360.0;
+                }
+                while delta < -180.0 {
+                    delta += 360.0;
+                }
+                angle_cb.set((current + delta * 0.25).rem_euclid(360.0));
                 level_draw.queue_draw();
             }));
 
@@ -359,6 +365,20 @@ mod imp {
                 }
             });
             window.add_action(&gallery);
+
+            let thumbnail = gio::SimpleAction::new("thumbnail", None);
+            let settings = self.settings.clone();
+            let weak = window.downgrade();
+            thumbnail.connect_activate(move |_, _| {
+                if let Some(window) = weak.upgrade() {
+                    if settings.thumbnail_opens_external() {
+                        window.open_latest_external();
+                    } else {
+                        window.show_gallery();
+                    }
+                }
+            });
+            window.add_action(&thumbnail);
 
             let settings_action = gio::SimpleAction::new("settings", None);
             let weak = window.downgrade();
@@ -547,6 +567,20 @@ impl CameraWindow {
 
     pub(crate) fn show_gallery(&self) {
         crate::ui::present_gallery(self);
+    }
+
+    fn open_latest_external(&self) {
+        let Some(path) = crate::media::latest_media() else {
+            self.show_toast(&gettext("No photos or videos yet"));
+            return;
+        };
+        let ask = self.imp().settings.open_with_dialog();
+        let weak = self.downgrade();
+        crate::media::launch_external(self, &path, ask, move |error| {
+            if let Some(window) = weak.upgrade() {
+                window.show_toast(&format!("{}: {error}", gettext("Could not open media")));
+            }
+        });
     }
 
     fn shutter(&self) {

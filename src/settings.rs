@@ -84,6 +84,10 @@ impl AppSettings {
         self.settings.boolean("open-with-dialog")
     }
 
+    pub fn thumbnail_opens_external(&self) -> bool {
+        self.settings.boolean("thumbnail-opens-external")
+    }
+
     pub fn jpeg_quality_profile(&self) -> JpegQuality {
         JpegQuality::from_key(&self.settings.string("jpeg-quality-profile"))
     }

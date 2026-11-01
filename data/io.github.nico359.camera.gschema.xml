@@ -6,6 +6,11 @@
 			<summary>Ask which application to use</summary>
 			<description>Show the application chooser when opening the last photo or video. When disabled, the default viewer is used.</description>
 		</key>
+		<key name="thumbnail-opens-external" type="b">
+			<default>false</default>
+			<summary>Open the thumbnail externally</summary>
+			<description>Open the latest photo or video in the system viewer when the last-media thumbnail is pressed. When disabled, the built-in gallery opens.</description>
+		</key>
 		<key name="jpeg-quality-profile" type="s">
 			<choices>
 				<choice value="original"/>

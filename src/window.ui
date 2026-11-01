@@ -176,11 +176,11 @@
                             <child>
                               <object class="GtkButton" id="last_photo_button">
                                 <property name="visible">False</property>
-                                <property name="action-name">win.gallery</property>
+                                <property name="action-name">win.thumbnail</property>
                                 <property name="width-request">56</property>
                                 <property name="height-request">56</property>
                                 <property name="valign">center</property>
-                                <property name="tooltip-text" translatable="yes">Open Gallery</property>
+                                <property name="tooltip-text" translatable="yes">Open Recent Media</property>
                                 <style>
                                   <class name="flat"/>
                                 </style>

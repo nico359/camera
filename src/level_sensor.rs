@@ -124,8 +124,7 @@ impl LevelSensor {
                         };
 
                         let angle = x.atan2(y).to_degrees();
-                        let nearest = (angle / 90.0).round() * 90.0;
-                        (callback_inner.callback)(angle - nearest);
+                        (callback_inner.callback)(angle);
                     },
                 );
                 glib::ControlFlow::Continue

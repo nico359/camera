@@ -2,241 +2,213 @@
 //
 // Copyright 2026 nico359
 
-//! A small read-only media browser for the Camera folders.
+//! Full-screen swipeable media viewer for the Camera folders.
 
 use std::cell::RefCell;
-use std::path::PathBuf;
+use std::path::Path;
 use std::rc::Rc;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use adw::prelude::*;
 use gettextrs::gettext;
-use gtk::gdk_pixbuf::Pixbuf;
-use gtk::{gio, glib};
+use gtk::{gdk, gio};
 
-use crate::media::{self, MediaItem, MediaKind};
+use crate::media::{self, MediaKind};
 use crate::window::CameraWindow;
 
-fn format_time(modified: SystemTime) -> String {
-    let seconds = modified
-        .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_secs() as i64)
-        .unwrap_or(0);
-
-    glib::DateTime::from_unix_local(seconds)
-        .ok()
-        .and_then(|date| date.format("%Y-%m-%d %H:%M").ok())
-        .map(|text| text.to_string())
-        .unwrap_or_default()
-}
-
-fn file_name(item: &MediaItem) -> String {
-    item.path
-        .file_name()
+fn file_name(path: &Path) -> String {
+    path.file_name()
         .and_then(|name| name.to_str())
         .unwrap_or("Media")
         .to_string()
 }
 
-fn build_tile(item: &MediaItem) -> gtk::FlowBoxChild {
-    let media = gtk::Box::new(gtk::Orientation::Vertical, 0);
-    media.set_height_request(100);
-    media.set_hexpand(true);
-    media.add_css_class("media-thumb");
-
-    match item.kind {
-        MediaKind::Photo => match Pixbuf::from_file_at_scale(&item.path, 240, 240, true) {
-            Ok(pixbuf) => {
-                let texture = gtk::gdk::Texture::for_pixbuf(&pixbuf);
-                let picture = gtk::Picture::for_paintable(&texture);
-                picture.set_content_fit(gtk::ContentFit::Cover);
-                picture.set_can_shrink(true);
-                picture.set_hexpand(true);
-                picture.set_vexpand(true);
-                media.append(&picture);
-            }
-            Err(_) => {
-                let icon = gtk::Image::from_icon_name("image-missing-symbolic");
-                icon.set_pixel_size(40);
-                icon.set_halign(gtk::Align::Center);
-                icon.set_valign(gtk::Align::Center);
-                icon.set_hexpand(true);
-                icon.set_vexpand(true);
-                media.append(&icon);
-            }
-        },
-        MediaKind::Video => {
-            let icon = gtk::Image::from_icon_name("camera-video-symbolic");
-            icon.set_pixel_size(48);
-            icon.set_halign(gtk::Align::Center);
-            icon.set_valign(gtk::Align::Center);
-            icon.set_hexpand(true);
-            icon.set_vexpand(true);
-            media.append(&icon);
-        }
-    }
-
-    let tile = gtk::Box::new(gtk::Orientation::Vertical, 4);
-    tile.add_css_class("media-tile");
-    tile.append(&media);
-
-    let label = gtk::Label::new(Some(&format_time(item.modified)));
-    label.add_css_class("caption");
-    label.set_ellipsize(gtk::pango::EllipsizeMode::End);
-    label.set_max_width_chars(16);
-    tile.append(&label);
-
-    let child = gtk::FlowBoxChild::new();
-    child.set_child(Some(&tile));
-    child.set_tooltip_text(Some(&file_name(item)));
-    child
-}
-
-fn show_viewer(
-    title: &gtk::Label,
-    content: &gtk::Box,
-    current: &Rc<RefCell<Option<PathBuf>>>,
-    item: &MediaItem,
-) {
-    title.set_label(&file_name(item));
-    *current.borrow_mut() = Some(item.path.clone());
-
-    while let Some(child) = content.first_child() {
-        content.remove(&child);
-    }
-
-    match item.kind {
-        MediaKind::Photo => {
-            let picture = gtk::Picture::for_filename(&item.path);
-            picture.set_content_fit(gtk::ContentFit::Contain);
-            picture.set_can_shrink(true);
-            picture.set_hexpand(true);
-            picture.set_vexpand(true);
-            content.append(&picture);
-        }
-        MediaKind::Video => {
-            let placeholder = gtk::Box::new(gtk::Orientation::Vertical, 8);
-            placeholder.set_halign(gtk::Align::Center);
-            placeholder.set_valign(gtk::Align::Center);
-            placeholder.set_hexpand(true);
-            placeholder.set_vexpand(true);
-
-            let icon = gtk::Image::from_icon_name("camera-video-symbolic");
-            icon.set_pixel_size(96);
-            let label = gtk::Label::new(Some(&gettext("Video")));
-            label.add_css_class("title-2");
-            placeholder.append(&icon);
-            placeholder.append(&label);
-            content.append(&placeholder);
-        }
-    }
-}
-
 pub fn present(parent: &CameraWindow) {
-    let items = media::scan_media();
+    let items = Rc::new(media::scan_media());
 
-    let flow = gtk::FlowBox::builder()
-        .selection_mode(gtk::SelectionMode::None)
-        .homogeneous(true)
-        .column_spacing(6)
-        .row_spacing(6)
-        .min_children_per_line(2)
-        .max_children_per_line(3)
-        .valign(gtk::Align::Start)
+    let window = adw::Window::builder()
+        .transient_for(parent)
+        .modal(true)
+        .default_width(360)
+        .default_height(760)
         .build();
-    flow.set_margin_top(12);
-    flow.set_margin_bottom(12);
-    flow.set_margin_start(12);
-    flow.set_margin_end(12);
+    window.set_application(parent.application().as_ref());
+    window.set_title(Some(&gettext("Gallery")));
+
+    let header = adw::HeaderBar::new();
+
+    let close = gtk::Button::from_icon_name("window-close-symbolic");
+    close.set_tooltip_text(Some(&gettext("Close")));
+    close.add_css_class("flat");
+    header.pack_start(&close);
+
+    let title = adw::WindowTitle::new(&gettext("Gallery"), "");
+    header.set_title_widget(Some(&title));
+
+    let external = gtk::Button::from_icon_name("external-link-symbolic");
+    external.set_tooltip_text(Some(&gettext("Open Externally")));
+    external.add_css_class("flat");
+    header.pack_end(&external);
+
+    let carousel = adw::Carousel::new();
+    carousel.set_hexpand(true);
+    carousel.set_vexpand(true);
+    carousel.set_allow_mouse_drag(true);
+    carousel.set_interactive(true);
+    carousel.set_focusable(true);
+
+    let mut video_widgets = Vec::new();
+    let mut pages = Vec::new();
 
     if items.is_empty() {
         let empty = gtk::Label::new(Some(&gettext("No photos or videos yet")));
-        empty.set_wrap(true);
-        empty.set_justify(gtk::Justification::Center);
-        empty.set_margin_top(48);
+        empty.add_css_class("title-2");
         empty.add_css_class("dim-label");
-        let child = gtk::FlowBoxChild::new();
-        child.set_child(Some(&empty));
-        flow.append(&child);
+        empty.set_halign(gtk::Align::Center);
+        empty.set_valign(gtk::Align::Center);
+        empty.set_hexpand(true);
+        empty.set_vexpand(true);
+
+        let page = gtk::Box::new(gtk::Orientation::Vertical, 0);
+        page.add_css_class("gallery-page");
+        page.set_hexpand(true);
+        page.set_vexpand(true);
+        page.append(&empty);
+        carousel.append(&page);
+        pages.push(page);
     } else {
-        for item in &items {
-            flow.append(&build_tile(item));
+        for item in items.iter() {
+            let page = gtk::Box::new(gtk::Orientation::Vertical, 0);
+            page.add_css_class("gallery-page");
+            page.set_hexpand(true);
+            page.set_vexpand(true);
+
+            match item.kind {
+                MediaKind::Photo => {
+                    let picture = gtk::Picture::for_filename(&item.path);
+                    picture.set_content_fit(gtk::ContentFit::Contain);
+                    picture.set_can_shrink(true);
+                    picture.set_hexpand(true);
+                    picture.set_vexpand(true);
+                    page.append(&picture);
+                    video_widgets.push(None);
+                }
+                MediaKind::Video => {
+                    let file = gio::File::for_path(&item.path);
+                    let video = gtk::Video::for_file(Some(&file));
+                    video.set_autoplay(false);
+                    video.set_loop(false);
+                    video.set_hexpand(true);
+                    video.set_vexpand(true);
+                    video.add_css_class("gallery-video");
+                    page.append(&video);
+                    video_widgets.push(Some(video));
+                }
+            }
+
+            carousel.append(&page);
+            pages.push(page);
         }
     }
 
-    let scroller = gtk::ScrolledWindow::builder()
-        .hscrollbar_policy(gtk::PolicyType::Never)
-        .vscrollbar_policy(gtk::PolicyType::Automatic)
-        .vexpand(true)
-        .build();
-    scroller.set_child(Some(&flow));
+    let videos = Rc::new(video_widgets);
+    let pages = Rc::new(pages);
+    let dots = adw::CarouselIndicatorDots::new();
+    dots.set_carousel(Some(&carousel));
+    dots.set_margin_top(8);
+    dots.set_margin_bottom(12);
 
-    let grid_page = gtk::Box::new(gtk::Orientation::Vertical, 0);
-    grid_page.append(&scroller);
-
-    let stack = gtk::Stack::new();
-    stack.set_transition_type(gtk::StackTransitionType::Crossfade);
-    stack.add_named(&grid_page, Some("grid"));
-
-    let viewer_title = gtk::Label::new(None);
-    viewer_title.set_ellipsize(gtk::pango::EllipsizeMode::Middle);
-    viewer_title.set_hexpand(true);
-    viewer_title.set_xalign(0.0);
-    viewer_title.add_css_class("title-4");
-
-    let back = gtk::Button::from_icon_name("go-previous-symbolic");
-    back.set_tooltip_text(Some(&gettext("Back")));
-    back.add_css_class("flat");
-
-    let header = gtk::Box::new(gtk::Orientation::Horizontal, 8);
-    header.set_margin_top(12);
-    header.set_margin_bottom(8);
-    header.set_margin_start(12);
-    header.set_margin_end(12);
-    header.append(&back);
-    header.append(&viewer_title);
-
-    let viewer_content = gtk::Box::new(gtk::Orientation::Vertical, 0);
-    viewer_content.set_hexpand(true);
-    viewer_content.set_vexpand(true);
-    viewer_content.set_margin_start(12);
-    viewer_content.set_margin_end(12);
-
-    let external = gtk::Button::with_label(&gettext("Open Externally"));
-    external.set_hexpand(true);
-    external.set_margin_top(8);
-    external.set_margin_bottom(12);
-    external.set_margin_start(12);
-    external.set_margin_end(12);
-
-    let viewer = gtk::Box::new(gtk::Orientation::Vertical, 0);
-    viewer.set_vexpand(true);
-    viewer.append(&header);
-    viewer.append(&viewer_content);
-    viewer.append(&external);
-    stack.add_named(&viewer, Some("viewer"));
-    stack.set_visible_child_name("grid");
+    let content = gtk::Box::new(gtk::Orientation::Vertical, 0);
+    content.add_css_class("gallery-viewer");
+    content.append(&carousel);
+    content.append(&dots);
 
     let toast = adw::ToastOverlay::new();
-    toast.set_child(Some(&stack));
+    toast.set_child(Some(&content));
 
-    let items = Rc::new(items);
-    let items_cb = Rc::clone(&items);
-    let stack_cb = stack.clone();
-    let title_cb = viewer_title.clone();
-    let content_cb = viewer_content.clone();
+    let toolbar = adw::ToolbarView::new();
+    toolbar.add_top_bar(&header);
+    toolbar.set_content(Some(&toast));
+    window.set_content(Some(&toolbar));
+
     let current = Rc::new(RefCell::new(None));
+    if let Some(item) = items.first() {
+        title.set_subtitle(&file_name(&item.path));
+        *current.borrow_mut() = Some(item.path.clone());
+    }
+
+    let items_cb = Rc::clone(&items);
+    let videos_cb = Rc::clone(&videos);
+    let title_cb = title.clone();
     let current_cb = Rc::clone(&current);
-    flow.connect_child_activated(move |_, child| {
-        let Some(item) = items_cb.get(child.index() as usize) else {
-            return;
-        };
-        show_viewer(&title_cb, &content_cb, &current_cb, item);
-        stack_cb.set_visible_child_name("viewer");
+    carousel.connect_page_changed(move |_, index| {
+        let index = index as usize;
+        if let Some(item) = items_cb.get(index) {
+            title_cb.set_subtitle(&file_name(&item.path));
+            *current_cb.borrow_mut() = Some(item.path.clone());
+        }
+
+        for (page, video) in videos_cb.iter().enumerate() {
+            if page == index {
+                continue;
+            }
+            if let Some(video) = video {
+                if let Some(stream) = video.media_stream() {
+                    stream.pause();
+                }
+            }
+        }
     });
 
-    let stack_cb = stack.clone();
-    back.connect_clicked(move |_| stack_cb.set_visible_child_name("grid"));
+    let window_cb = window.downgrade();
+    close.connect_clicked(move |_| {
+        if let Some(window) = window_cb.upgrade() {
+            window.close();
+        }
+    });
+
+    let pages_cb = Rc::clone(&pages);
+    let videos_cb = Rc::clone(&videos);
+    let carousel_cb = carousel.clone();
+    let window_cb = window.downgrade();
+    let keys = gtk::EventControllerKey::new();
+    keys.set_propagation_phase(gtk::PropagationPhase::Capture);
+    keys.connect_key_pressed(move |_, keyval, _, _| {
+        if keyval == gdk::Key::Escape {
+            if let Some(window) = window_cb.upgrade() {
+                window.close();
+            }
+            return gtk::glib::Propagation::Stop;
+        }
+
+        let current = carousel_cb.position().round().max(0.0) as usize;
+
+        if matches!(keyval, gdk::Key::space | gdk::Key::Return) {
+            if let Some(Some(video)) = videos_cb.get(current) {
+                if let Some(stream) = video.media_stream() {
+                    if stream.is_playing() {
+                        stream.pause();
+                    } else {
+                        stream.play();
+                    }
+                }
+            }
+            return gtk::glib::Propagation::Stop;
+        }
+        let target = if keyval == gdk::Key::Left {
+            current.checked_sub(1)
+        } else if keyval == gdk::Key::Right {
+            (current + 1 < pages_cb.len()).then_some(current + 1)
+        } else {
+            None
+        };
+
+        let Some(target) = target else {
+            return gtk::glib::Propagation::Proceed;
+        };
+        carousel_cb.scroll_to(&pages_cb[target], true);
+        gtk::glib::Propagation::Stop
+    });
+    window.add_controller(keys);
 
     let current_cb = Rc::clone(&current);
     let parent_cb = parent.downgrade();
@@ -259,11 +231,11 @@ pub fn present(parent: &CameraWindow) {
         });
     });
 
-    let dialog = adw::Dialog::builder()
-        .title(&gettext("Gallery"))
-        .content_width(360)
-        .content_height(700)
-        .build();
-    dialog.set_child(Some(&toast));
-    dialog.present(Some(parent));
+    let carousel_focus = carousel.clone();
+    window.connect_map(move |_| {
+        carousel_focus.grab_focus();
+    });
+
+    window.present();
+    window.fullscreen();
 }

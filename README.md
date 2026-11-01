@@ -21,12 +21,14 @@ inside a Flatpak. Feature parity with FuriCam or at least close to it is planned
   JPEG stream; on the FuriPhone this is 5152×3864)
 - asynchronous capture feedback: the UI reports when the JPEG is actually
   written, not when the request is submitted
-- a read-only media gallery: the last-media thumbnail and the hamburger Gallery
-  item open a thumbnail grid of photos and videos from the Camera folders.
-  Photos open in an in-app viewer; videos show a placeholder and open in the
-  system player. The viewer has an “Open Externally” button. The “Ask Which App
-  to Open Media” switch in Settings forces the portal app chooser for external
-  opens
+- a read-only full-screen media gallery: the last-media thumbnail (by default)
+  and the hamburger Gallery item open a swipeable carousel of photos and videos
+  from the Camera folders. Photos display full-screen; videos play in-app with
+  GStreamer. The header has Close and “Open Externally” buttons. A Settings
+  switch makes the last-media thumbnail open the latest item externally
+  instead; the “Ask Which App to Open Media” switch forces the portal app
+  chooser for external opens. On a keyboard, the arrow keys change pages,
+  Space/Return play or pause a video, and Escape closes the viewer
 - black preview canvas and header bar; the preview sits above a dedicated
   control bar, so it is centered between the header and the shutter row rather
   than behind the controls
@@ -48,13 +50,14 @@ inside a Flatpak. Feature parity with FuriCam or at least close to it is planned
   using every advertised JPEG size/aspect (typically 4:3 and 16:9, plus any
   other native sizes the camera exposes), JPEG quality tiers
   (Original/Balanced/Medium/Small), video resolution (1080p/4K), an optional
-  video stabilization (EIS) switch, a 3×3 composition grid toggle, a bubble
-  level, and the “Ask Which App to Open Media” preference. The quality tiers
+  video stabilization (EIS) switch, a 3×3 composition grid toggle, a rotating
+  FuriCam-style level line, and the “Ask Which App to Open Media” / “Open
+  Thumbnail Externally” preferences. The quality tiers
   map to the camera's JPEG quality 100/70/40/20; they are deliberately names
   rather than percentages because the HAL chooses the actual compression, and
   the JPEG is written by the HAL directly without an on-disk re-encode
-- video files are written to `~/Videos/Camera/VID_*.mp4`; the gallery shows
-  them alongside photos, and external opening uses the system portal
+- video files are written to `~/Videos/Camera/VID_*.mp4`; the gallery plays
+  them in-app, and external opening uses the system portal
 - device-rotation-aware still capture through iio-sensor-proxy
 - flip (front/back) button in the bottom row beside the shutter, and a camera
   picker in the header that includes every enumerated camera, including the
@@ -66,9 +69,9 @@ inside a Flatpak. Feature parity with FuriCam or at least close to it is planned
 
 Not implemented yet:
 
-- richer gallery features (delete/share, in-app video playback), HDR, RAW, and
-  the manual exposure/ISO/shutter “pro” controls. The engine already exposes
-  most of these through its C API; the UI is the remaining work.
+- richer gallery features (delete/share), HDR, RAW, and the manual
+  exposure/ISO/shutter “pro” controls. The engine already exposes most of these
+  through its C API; the UI is the remaining work.
 
 Known limitations:
 
@@ -80,7 +83,9 @@ Known limitations:
 - Video stabilization (EIS) crops the video field of view; it is off by
   default in Settings.
 - The level uses SensorFW (`com.nokia.SensorService`). If that service is
-  unavailable, the bubble has no readings.
+  unavailable, the line has no readings.
+- The gallery is read-only for now: no delete/share, and video playback depends
+  on the runtime's GStreamer H.264/AAC decoders (present on FuriOS).
 - The preview is portrait-locked by design; saved photos and videos follow the
   device tilt.
 - The Flatpak is self-hosted because it needs `--device=all` and the Halium
