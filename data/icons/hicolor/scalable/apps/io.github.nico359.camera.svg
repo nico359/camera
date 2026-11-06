@@ -20,11 +20,11 @@
      inkscape:pageopacity="0.0"
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
-     inkscape:zoom="6.8125"
+     inkscape:zoom="6.7578125"
      inkscape:cx="64"
-     inkscape:cy="64"
+     inkscape:cy="54.97341"
      inkscape:window-width="2048"
-     inkscape:window-height="1090"
+     inkscape:window-height="1083"
      inkscape:window-x="0"
      inkscape:window-y="0"
      inkscape:window-maximized="1"
@@ -37,7 +37,7 @@
        y1="19.178627"
        x2="18.330953"
        y2="107.65603"
-       gradientTransform="matrix(1.3576537,0,0,1.2976469,-20.962775,-18.546028)"
+       gradientTransform="matrix(1.2710931,0,0,1.2149123,-15.531857,-14.592338)"
        gradientUnits="userSpaceOnUse">
       <stop
          offset="0"
@@ -55,7 +55,7 @@
        x2="82"
        y2="86"
        gradientUnits="userSpaceOnUse"
-       gradientTransform="matrix(1.3273113,0,0,1.3273113,-20.962775,-18.546028)">
+       gradientTransform="matrix(1.2426852,0,0,1.2426852,-15.532351,-14.592338)">
       <stop
          offset="0"
          stop-color="#99c1f1"
@@ -67,66 +67,66 @@
     </linearGradient>
   </defs>
   <path
-     d="M 24.16581,21.273312 H 44.075481 L 54.693971,8.0001981 H 73.27633 L 83.894821,21.273312 h 19.909669 c 10.26011,0 18.58236,8.322243 18.58236,18.582359 V 100.912 c 0,10.26011 -8.32225,18.58236 -18.58236,18.58236 H 24.16581 c -10.260116,0 -18.582359,-8.32225 -18.582359,-18.58236 V 39.855671 c 0,-10.260116 8.322243,-18.582359 18.582359,-18.582359 z"
+     d="m 26.719443,22.688221 h 18.64028 l 9.941482,-12.426854 h 17.397594 l 9.941483,12.426854 h 18.640278 c 9.60596,0 17.39759,7.791636 17.39759,17.397594 v 57.163522 c 0,9.605963 -7.79163,17.397593 -17.39759,17.397593 H 26.719443 c -9.605957,0 -17.3975934,-7.79163 -17.3975934,-17.397593 V 40.085815 c 0,-9.605958 7.7916364,-17.397594 17.3975934,-17.397594 z"
      fill="url(#body)"
      stroke="#5e5c64"
-     stroke-width="3.31828"
+     stroke-width="3.10671"
      stroke-linejoin="round"
      id="path4"
      style="fill:url(#body)" />
   <circle
-     cx="63.985153"
-     cy="71.711143"
+     cx="63.999508"
+     cy="69.910263"
+     r="29.824448"
      fill="#1c71d8"
      id="circle4"
-     r="31.855473"
-     style="stroke-width:1.32731" />
+     style="stroke-width:1.24269" />
   <circle
-     cx="63.985153"
-     cy="71.711143"
+     cx="63.999508"
+     cy="69.910263"
+     r="22.368336"
      fill="url(#glass)"
      id="circle5"
-     r="23.891603"
-     style="fill:url(#glass);stroke-width:1.32731" />
+     style="fill:url(#glass);stroke-width:1.24269" />
   <circle
-     cx="63.985153"
-     cy="71.711143"
+     cx="63.999508"
+     cy="69.910263"
+     r="11.805511"
      fill="#1c71d8"
      id="circle6"
-     r="12.609459"
-     style="stroke-width:1.32731" />
+     style="stroke-width:1.24269" />
   <circle
-     cx="53.366661"
-     cy="61.092651"
+     cx="54.058025"
+     cy="59.968784"
+     r="5.5920839"
      fill="#ffffff"
      opacity="0.9"
      id="circle7"
-     r="5.9729009"
-     style="stroke-width:1.32731" />
+     style="stroke-width:1.24269" />
   <circle
-     cx="71.94902"
-     cy="79.675018"
+     cx="71.455627"
+     cy="77.366371"
+     r="3.728056"
      fill="#ffffff"
      opacity="0.35"
      id="circle8"
-     r="3.9819341"
-     style="stroke-width:1.32731" />
+     style="stroke-width:1.24269" />
   <rect
-     x="103.8045"
-     y="43.837608"
-     width="11.945803"
-     height="7.9638681"
-     rx="3.9819341"
+     x="101.28007"
+     y="43.813873"
+     width="11.184168"
+     height="7.4561119"
+     rx="3.728056"
      fill="#f6d32d"
      stroke="#5e5c64"
-     stroke-width="1.32731"
+     stroke-width="1.24269"
      id="rect8" />
   <circle
-     cx="29.475052"
-     cy="46.492229"
+     cx="31.68969"
+     cy="46.299236"
+     r="2.7339077"
      fill="#5e5c64"
      opacity="0.45"
      id="circle9"
-     r="2.920085"
-     style="stroke-width:1.32731" />
+     style="stroke-width:1.24269" />
 </svg>
