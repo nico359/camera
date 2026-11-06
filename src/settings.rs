@@ -88,6 +88,14 @@ impl AppSettings {
         self.settings.boolean("thumbnail-opens-external")
     }
 
+    pub fn geotag_photos(&self) -> bool {
+        self.settings.boolean("geotag-photos")
+    }
+
+    pub fn geotag_high_accuracy(&self) -> bool {
+        self.settings.boolean("geotag-high-accuracy")
+    }
+
     pub fn jpeg_quality_profile(&self) -> JpegQuality {
         JpegQuality::from_key(&self.settings.string("jpeg-quality-profile"))
     }

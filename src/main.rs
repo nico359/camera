@@ -23,6 +23,7 @@ mod camera;
 mod config;
 mod device_rotation;
 mod level_sensor;
+mod location;
 mod media;
 mod settings;
 mod ui;

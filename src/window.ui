@@ -35,6 +35,18 @@
                             <property name="sensitive">False</property>
                           </object>
                         </child>
+                        <child>
+                          <object class="GtkImage" id="gps_indicator">
+                            <property name="icon-name">find-location-symbolic</property>
+                            <property name="pixel-size">16</property>
+                            <property name="visible">False</property>
+                            <property name="valign">center</property>
+                            <property name="tooltip-text" translatable="yes">No GPS fix</property>
+                            <style>
+                              <class name="dim-label"/>
+                            </style>
+                          </object>
+                        </child>
                       </object>
                     </child>
                     <child type="end">

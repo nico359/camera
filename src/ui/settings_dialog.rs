@@ -285,6 +285,38 @@ pub fn present(window: &CameraWindow) {
     media_group.add(&thumbnail_external);
     page.add(&media_group);
 
+    let location_group = adw::PreferencesGroup::new();
+    location_group.set_title(&gettext("Location"));
+
+    let geotag = adw::SwitchRow::new();
+    geotag.set_title(&gettext("Add Location to Photos"));
+    geotag.set_subtitle(&gettext(
+        "Uses the system location service; videos are not tagged",
+    ));
+    geotag.set_active(settings.geotag_photos());
+    settings
+        .gio()
+        .bind("geotag-photos", &geotag, "active")
+        .build();
+    location_group.add(&geotag);
+
+    let accurate = adw::SwitchRow::new();
+    accurate.set_title(&gettext("Only Use Accurate Fixes"));
+    accurate.set_subtitle(&gettext(
+        "Skip tagging when the GPS accuracy is worse than 10 m",
+    ));
+    accurate.set_active(settings.geotag_high_accuracy());
+    settings
+        .gio()
+        .bind("geotag-high-accuracy", &accurate, "active")
+        .build();
+    settings
+        .gio()
+        .bind("geotag-photos", &accurate, "sensitive")
+        .build();
+    location_group.add(&accurate);
+    page.add(&location_group);
+
     let dialog = adw::PreferencesDialog::builder()
         .title(&gettext("Settings"))
         .content_width(360)

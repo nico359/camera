@@ -21,6 +21,8 @@
 use std::cell::{Cell, RefCell};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use adw::prelude::*;
@@ -162,6 +164,9 @@ mod imp {
         #[template_child]
         pub shutter_flash: TemplateChild<gtk::Box>,
 
+        #[template_child]
+        pub gps_indicator: TemplateChild<gtk::Image>,
+
         pub(super) capture_action: RefCell<Option<gio::SimpleAction>>,
         pub(super) switch_action: RefCell<Option<gio::SimpleAction>>,
         pub(super) select_action: RefCell<Option<gio::SimpleAction>>,
@@ -178,6 +183,10 @@ mod imp {
         pub(super) focus_assist_tick: RefCell<Option<glib::SourceId>>,
         pub(super) settings: AppSettings,
         pub(super) level_sensor: RefCell<Option<Rc<LevelSensor>>>,
+        pub(super) location_stop: RefCell<Option<Arc<AtomicBool>>>,
+        pub(super) location_rx:
+            RefCell<Option<std::sync::mpsc::Receiver<crate::location::LocationFix>>>,
+        pub(super) location_fix: RefCell<Option<crate::location::LocationFix>>,
     }
 
     #[glib::object_subclass]
@@ -204,6 +213,7 @@ mod imp {
             self.setup_gestures();
             self.setup_grid();
             self.setup_level();
+            self.setup_location();
             self.obj().load_latest_media();
         }
     }
@@ -277,6 +287,46 @@ mod imp {
                         }
                     }
                 });
+        }
+
+        fn setup_location(&self) {
+            // Poll fixes from the portal thread on the main loop. Keeping the
+            // latest fix in memory (never on disk) lets a capture use a fresh
+            // position without ever reusing a stale one.
+            let weak = self.obj().downgrade();
+            glib::timeout_add_local(Duration::from_millis(500), move || {
+                if let Some(window) = weak.upgrade() {
+                    let imp = window.imp();
+                    if let Some(rx) = imp.location_rx.borrow().as_ref() {
+                        let mut latest = None;
+                        while let Ok(fix) = rx.try_recv() {
+                            latest = Some(fix);
+                        }
+                        if let Some(fix) = latest {
+                            *imp.location_fix.borrow_mut() = Some(fix);
+                        }
+                    }
+                    window.update_gps_indicator();
+                }
+                glib::ControlFlow::Continue
+            });
+
+            let weak = self.obj().downgrade();
+            self.settings
+                .gio()
+                .connect_changed(Some("geotag-photos"), move |_, _| {
+                    if let Some(window) = weak.upgrade() {
+                        if window.imp().settings.geotag_photos() {
+                            window.start_location();
+                        } else {
+                            window.stop_location();
+                        }
+                    }
+                });
+
+            if self.settings.geotag_photos() {
+                self.obj().start_location();
+            }
         }
 
         fn setup_actions(&self) {
@@ -1026,7 +1076,9 @@ impl CameraWindow {
 
     fn on_photo_result(&self, path: &str, ok: bool) {
         if ok {
-            self.update_media_thumbnail(Path::new(path));
+            // Tag first; the thumbnail is refreshed after the EXIF write so it
+            // never reads a half-rewritten JPEG.
+            self.tag_photo_location(Path::new(path));
         } else {
             self.show_toast(&gettext("Could not save photo"));
         }
@@ -1097,6 +1149,95 @@ impl CameraWindow {
             }
         });
         *imp.shutter_flash_tick.borrow_mut() = Some(id);
+    }
+
+    pub(crate) fn start_location(&self) {
+        let imp = self.imp();
+        if imp.location_stop.borrow().is_some() {
+            self.update_gps_indicator();
+            return;
+        }
+
+        let (sender, receiver) = std::sync::mpsc::channel();
+        let stop = Arc::new(AtomicBool::new(false));
+        crate::location::spawn(sender, Arc::clone(&stop));
+        *imp.location_rx.borrow_mut() = Some(receiver);
+        *imp.location_stop.borrow_mut() = Some(stop);
+        *imp.location_fix.borrow_mut() = None;
+        self.update_gps_indicator();
+    }
+
+    pub(crate) fn stop_location(&self) {
+        let imp = self.imp();
+        if let Some(stop) = imp.location_stop.borrow_mut().take() {
+            stop.store(true, Ordering::Relaxed);
+        }
+        *imp.location_rx.borrow_mut() = None;
+        *imp.location_fix.borrow_mut() = None;
+        self.update_gps_indicator();
+    }
+
+    fn update_gps_indicator(&self) {
+        let imp = self.imp();
+        let indicator = imp.gps_indicator.get();
+
+        if !imp.settings.geotag_photos() {
+            indicator.set_visible(false);
+            return;
+        }
+
+        indicator.set_visible(true);
+        let fix = imp.location_fix.borrow();
+        let fresh = fix
+            .as_ref()
+            .filter(|fix| fix.received.elapsed() <= Duration::from_secs(5));
+        let usable =
+            fresh.is_some_and(|fix| !imp.settings.geotag_high_accuracy() || fix.accuracy <= 10.0);
+
+        let text = match fresh {
+            Some(fix) if usable => format!("GPS: ±{:.0} m", fix.accuracy),
+            Some(fix) => format!("GPS: ±{:.0} m (not used)", fix.accuracy),
+            None => gettext("GPS: no fix"),
+        };
+        indicator.set_tooltip_text(Some(&text));
+        if usable {
+            indicator.remove_css_class("dim-label");
+        } else {
+            indicator.add_css_class("dim-label");
+        }
+    }
+
+    /// Add GPS EXIF to a saved JPEG if the current fix is fresh and accurate
+    /// enough. Invalid or stale positions are silently skipped so a photo is
+    /// never tagged with a wrong location.
+    fn tag_photo_location(&self, path: &Path) {
+        let imp = self.imp();
+        let fix = if imp.settings.geotag_photos() {
+            imp.location_fix.borrow().clone().filter(|fix| {
+                fix.received.elapsed() <= Duration::from_secs(5)
+                    && (!imp.settings.geotag_high_accuracy() || fix.accuracy <= 10.0)
+            })
+        } else {
+            None
+        };
+
+        let Some(fix) = fix else {
+            self.update_media_thumbnail(path);
+            return;
+        };
+
+        let path = path.to_path_buf();
+        let weak = glib::SendWeakRef::from(self.downgrade());
+        std::thread::spawn(move || {
+            if let Err(error) = crate::location::write_gps(&path, &fix) {
+                eprintln!("GPS tag for {}: {error}", path.display());
+            }
+            glib::idle_add_once(move || {
+                if let Some(window) = weak.upgrade() {
+                    window.update_media_thumbnail(&path);
+                }
+            });
+        });
     }
 
     pub(crate) fn show_toast(&self, message: &str) {

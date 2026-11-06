@@ -11,9 +11,13 @@ default = []
 camera2 = []
 
 [dependencies]
+ashpd = { version = "0.13", default-features = false, features = ["tokio", "location"] }
+futures-util = "0.3"
 gettext-rs = { version = "0.7", features = ["gettext-system"] }
 gtk = { version = "0.9", package = "gtk4", features = ["gnome_47"] }
 image = { version = "0.25", default-features = false, features = ["jpeg"] }
+little_exif = "0.6.23"
+tokio = { version = "1", features = ["rt", "macros"] }
 
 [dependencies.adw]
 package = "libadwaita"

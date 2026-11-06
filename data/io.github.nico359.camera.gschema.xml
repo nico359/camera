@@ -46,6 +46,16 @@
 			<summary>Video resolution</summary>
 			<description>Video recording size. 4K may not be supported reliably by every camera.</description>
 		</key>
+		<key name="geotag-photos" type="b">
+			<default>false</default>
+			<summary>Add location to photos</summary>
+			<description>Write the current GPS position into captured JPEGs. The location is requested from the system location service and is never cached beyond the current session.</description>
+		</key>
+		<key name="geotag-high-accuracy" type="b">
+			<default>true</default>
+			<summary>Only use accurate fixes</summary>
+			<description>Skip the location tag when the latest GPS fix is less accurate than 10 metres or is older than a few seconds.</description>
+		</key>
 		<key name="video-stabilization" type="b">
 			<default>false</default>
 			<summary>Video stabilization</summary>
