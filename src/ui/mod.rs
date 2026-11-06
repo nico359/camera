@@ -5,6 +5,7 @@
 mod camera_view;
 mod gallery;
 mod settings_dialog;
+mod zoom_picture;
 
 pub use camera_view::CameraView;
 pub use gallery::present as present_gallery;

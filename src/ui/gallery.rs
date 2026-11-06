@@ -17,6 +17,7 @@ use gtk::{gdk, gio};
 use image::ImageDecoder;
 
 use crate::media::{self, MediaKind};
+use crate::ui::zoom_picture::ZoomPicture;
 use crate::window::CameraWindow;
 
 /// Photos are decoded to fit this box instead of holding a full-resolution
@@ -123,7 +124,7 @@ fn decode_photo(path: PathBuf) -> Option<DecodedPhoto> {
 /// cache so returning to a page is instant.
 struct PhotoPage {
     root: gtk::Overlay,
-    picture: gtk::Picture,
+    picture: ZoomPicture,
     spinner: gtk::Spinner,
     path: PathBuf,
     loaded: Cell<bool>,
@@ -137,11 +138,7 @@ impl PhotoPage {
         root.set_hexpand(true);
         root.set_vexpand(true);
 
-        let picture = gtk::Picture::new();
-        picture.set_content_fit(gtk::ContentFit::Contain);
-        picture.set_can_shrink(true);
-        picture.set_hexpand(true);
-        picture.set_vexpand(true);
+        let picture = ZoomPicture::new();
         root.set_child(Some(&picture));
 
         let spinner = gtk::Spinner::new();
@@ -167,7 +164,7 @@ impl PhotoPage {
         }
 
         if let Some(texture) = PHOTO_CACHE.with(|cache| cache.borrow().get(&self.path)) {
-            self.picture.set_paintable(Some(&texture));
+            self.picture.set_texture(Some(&texture));
             self.loaded.set(true);
             return;
         }
@@ -229,16 +226,24 @@ impl PhotoPage {
                 .borrow_mut()
                 .insert(self.path.clone(), texture.clone())
         });
-        self.picture.set_paintable(Some(&texture));
+        self.picture.set_texture(Some(&texture));
         self.loaded.set(true);
     }
 
     fn unload(&self) {
         if self.loaded.replace(false) {
-            self.picture.set_paintable(None::<&gdk::Paintable>);
+            self.picture.clear();
         }
         self.spinner.stop();
         self.spinner.set_visible(false);
+    }
+
+    fn zoom_in(&self) {
+        self.picture.zoom_in();
+    }
+
+    fn zoom_out(&self) {
+        self.picture.zoom_out();
     }
 }
 
@@ -811,6 +816,24 @@ pub fn present(parent: &CameraWindow) {
             if let Some(entry) = entries_cb.get(current) {
                 if let PageMedia::Video(video) = &entry.media {
                     video.toggle();
+                }
+            }
+            return gtk::glib::Propagation::Stop;
+        }
+
+        if matches!(keyval, gdk::Key::plus | gdk::Key::equal | gdk::Key::KP_Add) {
+            if let Some(entry) = entries_cb.get(current) {
+                if let PageMedia::Photo(photo) = &entry.media {
+                    photo.zoom_in();
+                }
+            }
+            return gtk::glib::Propagation::Stop;
+        }
+
+        if matches!(keyval, gdk::Key::minus | gdk::Key::KP_Subtract) {
+            if let Some(entry) = entries_cb.get(current) {
+                if let PageMedia::Photo(photo) = &entry.media {
+                    photo.zoom_out();
                 }
             }
             return gtk::glib::Propagation::Stop;
