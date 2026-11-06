@@ -8,10 +8,12 @@ use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, VecDeque};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
+use std::time::Duration;
 
 use adw::prelude::*;
 use gettextrs::gettext;
 use gtk::{gdk, gio};
+use image::ImageDecoder;
 
 use crate::media::{self, MediaKind};
 use crate::window::CameraWindow;
@@ -19,7 +21,7 @@ use crate::window::CameraWindow;
 /// Photos are decoded to fit this box instead of holding a full-resolution
 /// texture.  A 12 MP JPEG is ~48 MB as an RGBA texture; this keeps each page
 /// in the low megabytes and makes swiping cheap.
-const PHOTO_MAX: i32 = 2048;
+const PHOTO_MAX: i32 = 1600;
 
 /// Poster frames are only shown while a video prepares, so they stay small.
 const POSTER_MAX: f64 = 1280.0;
@@ -68,81 +70,157 @@ thread_local! {
     static POSTER_CACHE: RefCell<TextureCache> = RefCell::new(TextureCache::new(12));
 }
 
-fn load_photo_texture(path: &Path) -> Option<gdk::Texture> {
-    let pixbuf = gdk_pixbuf::Pixbuf::from_file_at_scale(path, PHOTO_MAX, PHOTO_MAX, true).ok()?;
-    let pixbuf = pixbuf.apply_embedded_orientation().unwrap_or(pixbuf);
+struct DecodedPhoto {
+    width: i32,
+    height: i32,
+    bytes: Vec<u8>,
+}
 
-    let bytes = pixbuf.read_pixel_bytes();
-    let format = if pixbuf.n_channels() == 4 {
-        gdk::MemoryFormat::R8g8b8a8
-    } else {
-        gdk::MemoryFormat::R8g8b8
-    };
-    let texture = gdk::MemoryTexture::new(
-        pixbuf.width(),
-        pixbuf.height(),
-        format,
-        &bytes,
-        pixbuf.rowstride() as usize,
-    );
-    Some(texture.upcast())
+/// Decode on a worker thread. Pure Rust, so it is safe to call from any
+/// thread (gdk-pixbuf decoding from a sandboxed worker thread hangs).
+fn decode_photo(path: PathBuf) -> Option<DecodedPhoto> {
+    let reader = image::ImageReader::open(&path)
+        .ok()?
+        .with_guessed_format()
+        .ok()?;
+    let mut decoder = reader.into_decoder().ok()?;
+    let orientation = decoder
+        .orientation()
+        .unwrap_or(image::metadata::Orientation::NoTransforms);
+    let mut image = image::DynamicImage::from_decoder(decoder).ok()?;
+    image.apply_orientation(orientation);
+
+    let thumbnail = image.thumbnail(PHOTO_MAX as u32, PHOTO_MAX as u32);
+    let rgba = thumbnail.to_rgba8();
+    let (width, height) = rgba.dimensions();
+
+    Some(DecodedPhoto {
+        width: width as i32,
+        height: height as i32,
+        bytes: rgba.into_raw(),
+    })
 }
 
 /// A photo page. The scaled texture is decoded lazily and kept in the shared
 /// cache so returning to a page is instant.
 struct PhotoPage {
-    root: gtk::Box,
+    root: gtk::Overlay,
     picture: gtk::Picture,
+    spinner: gtk::Spinner,
     path: PathBuf,
     loaded: Cell<bool>,
+    loading: Cell<bool>,
 }
 
 impl PhotoPage {
     fn new(path: &Path) -> Rc<Self> {
-        let root = page_box();
+        let root = gtk::Overlay::new();
+        root.add_css_class("gallery-page");
+        root.set_hexpand(true);
+        root.set_vexpand(true);
 
         let picture = gtk::Picture::new();
         picture.set_content_fit(gtk::ContentFit::Contain);
         picture.set_can_shrink(true);
         picture.set_hexpand(true);
         picture.set_vexpand(true);
-        root.append(&picture);
+        root.set_child(Some(&picture));
+
+        let spinner = gtk::Spinner::new();
+        spinner.set_halign(gtk::Align::Center);
+        spinner.set_valign(gtk::Align::Center);
+        spinner.set_size_request(48, 48);
+        spinner.set_visible(false);
+        root.add_overlay(&spinner);
 
         Rc::new(Self {
             root,
             picture,
+            spinner,
             path: path.to_path_buf(),
             loaded: Cell::new(false),
+            loading: Cell::new(false),
         })
     }
 
-    fn load(&self) {
+    fn load(self: &Rc<Self>) {
         if self.loaded.get() {
             return;
         }
 
-        let texture = PHOTO_CACHE
-            .with(|cache| cache.borrow().get(&self.path))
-            .or_else(|| {
-                let texture = load_photo_texture(&self.path)?;
-                PHOTO_CACHE.with(|cache| {
-                    cache
-                        .borrow_mut()
-                        .insert(self.path.clone(), texture.clone())
-                });
-                Some(texture)
-            });
-
-        if let Some(texture) = texture {
+        if let Some(texture) = PHOTO_CACHE.with(|cache| cache.borrow().get(&self.path)) {
             self.picture.set_paintable(Some(&texture));
             self.loaded.set(true);
+            return;
         }
+
+        if self.loading.replace(true) {
+            return;
+        }
+
+        self.spinner.set_visible(true);
+        self.spinner.start();
+
+        let path = self.path.clone();
+        let (sender, receiver) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let _ = sender.send(decode_photo(path));
+        });
+
+        let weak = Rc::downgrade(self);
+        gtk::glib::timeout_add_local(Duration::from_millis(10), move || {
+            let decoded = match receiver.try_recv() {
+                Ok(decoded) => decoded,
+                Err(std::sync::mpsc::TryRecvError::Empty) => {
+                    return gtk::glib::ControlFlow::Continue;
+                }
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                    if let Some(page) = weak.upgrade() {
+                        page.loading.set(false);
+                        page.spinner.stop();
+                        page.spinner.set_visible(false);
+                    }
+                    return gtk::glib::ControlFlow::Break;
+                }
+            };
+
+            if let Some(page) = weak.upgrade() {
+                page.loading.set(false);
+                page.spinner.stop();
+                page.spinner.set_visible(false);
+                if let Some(decoded) = decoded {
+                    page.apply_decoded(decoded);
+                }
+            }
+            gtk::glib::ControlFlow::Break
+        });
+    }
+
+    fn apply_decoded(&self, decoded: DecodedPhoto) {
+        let bytes = gtk::glib::Bytes::from(&decoded.bytes);
+        let texture: gdk::Texture = gdk::MemoryTexture::new(
+            decoded.width,
+            decoded.height,
+            gdk::MemoryFormat::R8g8b8a8,
+            &bytes,
+            decoded.width as usize * 4,
+        )
+        .upcast();
+        PHOTO_CACHE.with(|cache| {
+            cache
+                .borrow_mut()
+                .insert(self.path.clone(), texture.clone())
+        });
+        self.picture.set_paintable(Some(&texture));
+        self.loaded.set(true);
     }
 
     fn unload(&self) {
         if self.loaded.replace(false) {
             self.picture.set_paintable(None::<&gdk::Paintable>);
         }
+        self.spinner.stop();
+        self.spinner.set_visible(false);
     }
 }
 
@@ -462,6 +540,25 @@ impl PageEntry {
             PageMedia::Empty => {}
         }
     }
+
+    /// Warm a neighbouring photo while the carousel is idle. Videos are not
+    /// prefetched so only one decoder ever runs.
+    fn prefetch(&self) {
+        if let PageMedia::Photo(photo) = &self.media {
+            photo.load();
+        }
+    }
+}
+
+/// Warm the neighbouring photos. Decoding happens on worker threads, so this
+/// is safe to call while the carousel is still moving.
+fn prefetch_neighbors(entries: &[PageEntry], index: usize) {
+    if let Some(entry) = index.checked_sub(1).and_then(|i| entries.get(i)) {
+        entry.prefetch();
+    }
+    if let Some(entry) = entries.get(index + 1) {
+        entry.prefetch();
+    }
 }
 
 pub fn present(parent: &CameraWindow) {
@@ -559,6 +656,11 @@ pub fn present(parent: &CameraWindow) {
     if let Some(entry) = entries.get(first) {
         entry.load();
     }
+
+    // Warm the next few photos while the first one decodes.
+    for entry in entries.iter().skip(first + 1).take(2) {
+        entry.prefetch();
+    }
     if let Some(item) = items.first() {
         title.set_subtitle(&file_name(&item.path));
         *current.borrow_mut() = Some(item.path.clone());
@@ -582,6 +684,8 @@ pub fn present(parent: &CameraWindow) {
                 entry.unload();
             }
         }
+
+        prefetch_neighbors(&entries_cb, index);
     });
 
     let entries_cb = Rc::clone(&entries);
