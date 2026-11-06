@@ -23,9 +23,10 @@ settings, a rotating level and an in-app media gallery inside a Flatpak. Feature
   written, not when the request is submitted
 - a read-only media viewer inside the main window: the last-media thumbnail
   (by default) and the hamburger Gallery item push a swipeable carousel of
-  photos and videos from the Camera folders. Photos fill the window; videos
-  show their paused first frame and play in-app with GStreamer, and only the
-  visible page keeps a decoder loaded. The header has Back and “Open
+  photos and videos from the Camera folders. Photos fill the window and are
+  decoded on worker threads with neighbouring pages prefetched; videos show
+  their paused first frame and play in-app with GStreamer, and only the visible
+  page keeps a decoder loaded. The header has Back and “Open
   Externally” buttons. A Settings switch makes the last-media thumbnail open
   the latest item externally instead; the “Ask Which App to Open Media” switch
   forces the portal app chooser for external opens. On a keyboard, the arrow
@@ -71,8 +72,9 @@ settings, a rotating level and an in-app media gallery inside a Flatpak. Feature
 
 Not implemented yet:
 
-- richer gallery features (delete/share, pinch/double-tap zoom, cached video
-  poster frames), HDR, RAW, and the manual exposure/ISO/shutter “pro” controls.
+- richer gallery features (delete/share, pinch/double-tap zoom, persistent
+  thumbnail and poster caches), HDR, RAW, and the manual exposure/ISO/shutter
+  “pro” controls.
   The engine already exposes most of these through its C API; the UI is the
   remaining work.
 
