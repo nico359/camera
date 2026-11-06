@@ -1078,11 +1078,18 @@ impl CameraWindow {
 
         let started = Instant::now();
         let duration = Duration::from_millis(180);
+        let weak = self.downgrade();
         let id = glib::timeout_add_local(Duration::from_millis(16), move || {
             let elapsed = started.elapsed().as_secs_f64();
             let progress = elapsed / duration.as_secs_f64();
             if progress >= 1.0 {
                 flash.set_opacity(0.0);
+                // The source removes itself after returning Break; forget its
+                // id so a later shutter press never removes a stale (possibly
+                // reused) source id.
+                if let Some(window) = weak.upgrade() {
+                    window.imp().shutter_flash_tick.borrow_mut().take();
+                }
                 glib::ControlFlow::Break
             } else {
                 flash.set_opacity(0.6 * (1.0 - progress));
