@@ -57,6 +57,7 @@ name = "camera"
 version = "0.2.0"
 dependencies = [
  "cc",
+ "gdk-pixbuf",
  "gettext-rs",
  "gtk4",
  "libadwaita",

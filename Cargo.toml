@@ -11,6 +11,7 @@ default = []
 camera2 = []
 
 [dependencies]
+gdk-pixbuf = "0.20"
 gettext-rs = { version = "0.7", features = ["gettext-system"] }
 gtk = { version = "0.9", package = "gtk4", features = ["gnome_47"] }
 
