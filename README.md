@@ -90,6 +90,9 @@ Known limitations:
   default in Settings.
 - The level uses SensorFW (`com.nokia.SensorService`). If that service is
   unavailable, the line has no readings.
+- GPS tagging needs the system location permission and a fresh fix. Indoors the
+  phone often gets no fix; those photos are saved without a location rather
+  than with a wrong one.
 - The gallery is read-only for now: no delete/share, and video playback depends
   on the runtime's GStreamer H.264/AAC decoders (present on FuriOS).
 - The preview is portrait-locked by design; saved photos and videos follow the
