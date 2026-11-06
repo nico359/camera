@@ -18,6 +18,10 @@
   box-shadow: none;
 }
 
+.shutter-flash {
+  background-color: #000000;
+}
+
 .focus-reticle {
   border: 2px solid #f6d32d;
   border-radius: 10px;

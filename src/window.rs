@@ -159,6 +159,9 @@ mod imp {
         #[template_child]
         pub toast_overlay: TemplateChild<adw::ToastOverlay>,
 
+        #[template_child]
+        pub shutter_flash: TemplateChild<gtk::Box>,
+
         pub(super) capture_action: RefCell<Option<gio::SimpleAction>>,
         pub(super) switch_action: RefCell<Option<gio::SimpleAction>>,
         pub(super) select_action: RefCell<Option<gio::SimpleAction>>,
@@ -166,6 +169,7 @@ mod imp {
         pub(super) flash_mode: Cell<i32>,
         pub(super) recording_started: Cell<Option<Instant>>,
         pub(super) recording_tick: RefCell<Option<glib::SourceId>>,
+        pub(super) shutter_flash_tick: RefCell<Option<glib::SourceId>>,
         pub(super) recording_path: RefCell<Option<PathBuf>>,
         pub(super) zoom_gesture_start: Cell<Option<f32>>,
         pub(super) tap_start: Cell<Option<(f64, f64)>>,
@@ -945,12 +949,7 @@ impl CameraWindow {
         };
 
         match self.imp().camera_view.capture_photo(&path) {
-            Ok(()) => {
-                // Keep this short so the result toast is not stuck behind it.
-                let toast = adw::Toast::new(&gettext("Saving photo…"));
-                toast.set_timeout(2);
-                self.imp().toast_overlay.add_toast(toast);
-            }
+            Ok(()) => self.flash_shutter(),
             Err(error) => self.show_toast(&format!("{}: {error}", gettext("Capture failed"))),
         }
     }
@@ -1028,7 +1027,6 @@ impl CameraWindow {
     fn on_photo_result(&self, path: &str, ok: bool) {
         if ok {
             self.update_media_thumbnail(Path::new(path));
-            self.show_short_toast(&gettext("Photo saved"));
         } else {
             self.show_toast(&gettext("Could not save photo"));
         }
@@ -1065,6 +1063,33 @@ impl CameraWindow {
         if let Some(path) = crate::media::latest_media() {
             self.update_media_thumbnail(&path);
         }
+    }
+
+    /// Brief blackout over the preview, the way most camera apps acknowledge a
+    /// shutter press. Replaces the "Saving photo" / "Photo saved" toasts.
+    fn flash_shutter(&self) {
+        let imp = self.imp();
+        if let Some(id) = imp.shutter_flash_tick.borrow_mut().take() {
+            id.remove();
+        }
+
+        let flash = imp.shutter_flash.get();
+        flash.set_opacity(0.6);
+
+        let started = Instant::now();
+        let duration = Duration::from_millis(180);
+        let id = glib::timeout_add_local(Duration::from_millis(16), move || {
+            let elapsed = started.elapsed().as_secs_f64();
+            let progress = elapsed / duration.as_secs_f64();
+            if progress >= 1.0 {
+                flash.set_opacity(0.0);
+                glib::ControlFlow::Break
+            } else {
+                flash.set_opacity(0.6 * (1.0 - progress));
+                glib::ControlFlow::Continue
+            }
+        });
+        *imp.shutter_flash_tick.borrow_mut() = Some(id);
     }
 
     pub(crate) fn show_toast(&self, message: &str) {

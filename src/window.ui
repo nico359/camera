@@ -156,6 +156,17 @@
                             </style>
                           </object>
                         </child>
+                        <child type="overlay">
+                          <object class="GtkBox" id="shutter_flash">
+                            <property name="can-target">False</property>
+                            <property name="opacity">0</property>
+                            <property name="hexpand">True</property>
+                            <property name="vexpand">True</property>
+                            <style>
+                              <class name="shutter-flash"/>
+                            </style>
+                          </object>
+                        </child>
                           </object>
                         </property>
                       </object>
