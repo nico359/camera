@@ -6,9 +6,10 @@
 
 use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, VecDeque};
+use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
-use std::time::Duration;
+use std::time::{Duration, Instant, UNIX_EPOCH};
 
 use adw::prelude::*;
 use gettextrs::gettext;
@@ -68,6 +69,23 @@ impl TextureCache {
 thread_local! {
     static PHOTO_CACHE: RefCell<TextureCache> = RefCell::new(TextureCache::new(4));
     static POSTER_CACHE: RefCell<TextureCache> = RefCell::new(TextureCache::new(12));
+}
+
+/// Persistent poster frame for a video, keyed on the file path and mtime.
+fn poster_cache_path(path: &Path) -> Option<PathBuf> {
+    let modified = std::fs::metadata(path).ok()?.modified().ok()?;
+    let seconds = modified.duration_since(UNIX_EPOCH).ok()?.as_secs();
+
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    path.hash(&mut hasher);
+    seconds.hash(&mut hasher);
+
+    Some(
+        gtk::glib::user_cache_dir()
+            .join("camera")
+            .join("vidthumbs")
+            .join(format!("{:016x}.png", hasher.finish())),
+    )
 }
 
 struct DecodedPhoto {
@@ -271,7 +289,12 @@ impl VideoPage {
         button.set_visible(false);
         root.add_overlay(&button);
 
-        let poster = POSTER_CACHE.with(|cache| cache.borrow().get(path));
+        let poster = POSTER_CACHE
+            .with(|cache| cache.borrow().get(path))
+            .or_else(|| {
+                let cache_path = poster_cache_path(path)?;
+                gdk::Texture::from_filename(&cache_path).ok()
+            });
         if let Some(poster) = &poster {
             picture.set_paintable(Some(poster));
         }
@@ -371,6 +394,14 @@ impl VideoPage {
                 .borrow_mut()
                 .insert(self.path.clone(), texture.clone())
         });
+
+        if let Some(cache_path) = poster_cache_path(&self.path) {
+            if let Some(directory) = cache_path.parent() {
+                let _ = std::fs::create_dir_all(directory);
+            }
+            let _ = texture.save_to_png(&cache_path);
+        }
+
         *self.poster.borrow_mut() = Some(texture);
         self.button.set_visible(true);
     }
@@ -559,6 +590,79 @@ fn prefetch_neighbors(entries: &[PageEntry], index: usize) {
     if let Some(entry) = entries.get(index + 1) {
         entry.prefetch();
     }
+}
+
+struct WarmVideo {
+    index: usize,
+    video: Rc<VideoPage>,
+    started: Instant,
+}
+
+/// Generate missing video posters in the background, one decoder at a time and
+/// nearest page first. Mirrors FuriCam's thumbnail queue.
+fn start_poster_prewarm(
+    carousel: adw::Carousel,
+    entries: Rc<Vec<PageEntry>>,
+    first: usize,
+) -> Rc<RefCell<Option<gtk::glib::SourceId>>> {
+    let mut indices: Vec<usize> = entries
+        .iter()
+        .enumerate()
+        .filter_map(|(index, entry)| match &entry.media {
+            PageMedia::Video(video) if video.poster.borrow().is_none() => Some(index),
+            _ => None,
+        })
+        .collect();
+    indices.sort_by_key(|index| index.abs_diff(first));
+
+    let queue = Rc::new(RefCell::new(VecDeque::from(indices)));
+    let warming: Rc<RefCell<Option<WarmVideo>>> = Rc::new(RefCell::new(None));
+    let tick: Rc<RefCell<Option<gtk::glib::SourceId>>> = Rc::new(RefCell::new(None));
+
+    let tick_cb = Rc::clone(&tick);
+    let id = gtk::glib::timeout_add_local(Duration::from_millis(300), move || {
+        let current = carousel.position().round().max(0.0) as usize;
+
+        let warm = { warming.borrow_mut().take() };
+        if let Some(warm) = warm {
+            let done = warm.video.poster.borrow().is_some()
+                || warm.started.elapsed() > Duration::from_secs(4);
+            if !done {
+                *warming.borrow_mut() = Some(warm);
+                return gtk::glib::ControlFlow::Continue;
+            }
+            if current != warm.index {
+                warm.video.unload();
+            }
+        }
+
+        loop {
+            let next = { queue.borrow_mut().pop_front() };
+            let Some(index) = next else {
+                tick_cb.borrow_mut().take();
+                return gtk::glib::ControlFlow::Break;
+            };
+            if index == current {
+                continue;
+            }
+            let PageMedia::Video(video) = &entries[index].media else {
+                continue;
+            };
+            if video.poster.borrow().is_some() {
+                continue;
+            }
+
+            video.load();
+            *warming.borrow_mut() = Some(WarmVideo {
+                index,
+                video: Rc::clone(video),
+                started: Instant::now(),
+            });
+            return gtk::glib::ControlFlow::Continue;
+        }
+    });
+    *tick.borrow_mut() = Some(id);
+    tick
 }
 
 pub fn present(parent: &CameraWindow) {
@@ -755,4 +859,11 @@ pub fn present(parent: &CameraWindow) {
     });
 
     navigation.push(&page);
+
+    let warm_tick = start_poster_prewarm(carousel.clone(), Rc::clone(&entries), first);
+    toolbar.connect_unmap(move |_| {
+        if let Some(id) = warm_tick.borrow_mut().take() {
+            id.remove();
+        }
+    });
 }
