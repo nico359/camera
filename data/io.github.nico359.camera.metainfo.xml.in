@@ -9,7 +9,8 @@
   <description>
     <p>Camera is a GTK4 and libadwaita camera application for FuriOS and other Halium-based Linux phones. It uses the FuriCam Camera2 engine for a real viewfinder, full-resolution photos and hardware-encoded video inside a Flatpak.</p>
     <p>Version 0.2.0 adds a settings dialog with per-camera photo resolutions and JPEG quality tiers, 1080p or experimental 4K H.264 video with optional stabilization, a 3×3 composition grid and a rotating level line driven by the phone’s accelerometer.</p>
-    <p>Photos and videos are saved to the standard Pictures/Camera and Videos/Camera folders. A full-window gallery browses them with horizontal swipes and plays videos in-app; the last-media thumbnail can instead open the latest item in the system viewer.</p>
+    <p>Version 0.3.0 rounds out media handling: a full-window gallery with swipe navigation, pinch zoom and in-app video playback, cached video posters, and optional GPS tagging for photos that only uses fresh, accurate fixes.</p>
+    <p>Photos and videos are saved to the standard Pictures/Camera and Videos/Camera folders. The last-media thumbnail can instead open the latest item in the system viewer.</p>
   </description>
 
   <icon type="stock">io.github.nico359.camera</icon>
@@ -54,11 +55,11 @@
   <screenshots>
     <screenshot type="default">
       <caption>Photo mode</caption>
-      <image>https://raw.githubusercontent.com/nico359/camera/v0.2.0/data/screenshot-photo.png</image>
+      <image>https://raw.githubusercontent.com/nico359/camera/v0.3.0/data/screenshot-photo.png</image>
     </screenshot>
     <screenshot>
       <caption>Video mode</caption>
-      <image>https://raw.githubusercontent.com/nico359/camera/v0.2.0/data/screenshot-video.png</image>
+      <image>https://raw.githubusercontent.com/nico359/camera/v0.3.0/data/screenshot-video.png</image>
     </screenshot>
   </screenshots>
 
@@ -70,6 +71,18 @@
   <content_rating type="oars-1.1" />
 
   <releases>
+    <release version="0.3.0" date="2026-11-06" type="stable">
+      <description translate="no">
+        <p>Media and location release.</p>
+        <ul>
+          <li>Full-window gallery with asynchronous photo decoding, prefetched neighbours and cached video posters</li>
+          <li>Pinch zoom and drag-to-pan in the gallery, plus keyboard zoom</li>
+          <li>Optional GPS tagging for photos with a 10 m accuracy gate and a live fix indicator</li>
+          <li>Shutter blackout feedback instead of photo-saved toasts</li>
+          <li>Fix a crash on repeated shutter presses</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.2.0" date="2026-11-01" type="stable">
       <description translate="no">
         <p>Settings and media browsing release.</p>
