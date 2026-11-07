@@ -4,7 +4,7 @@
 //
 // Minimal safe wrapper around FuriCam's backend-neutral `fc2_*` C API.
 
-use std::ffi::{c_char, c_int, c_void, CStr, CString};
+use std::ffi::{c_char, c_float, c_int, c_longlong, c_void, CStr, CString};
 use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 use std::ptr;
@@ -29,6 +29,20 @@ struct fc2_camera_info {
 struct fc2_size {
     width: c_int,
     height: c_int,
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, Default)]
+struct fc2_manual_limits {
+    supported: c_int,
+    iso_min: c_int,
+    iso_max: c_int,
+    exposure_min_ns: c_longlong,
+    exposure_max_ns: c_longlong,
+    ev_min: c_int,
+    ev_max: c_int,
+    ev_step: c_float,
+    min_focus_distance: c_float,
 }
 
 const FC2_FACING_BACK: c_int = 1;
@@ -102,6 +116,13 @@ extern "C" {
     fn fc2_clear_focus_assist(camera: *mut fc2_camera);
     fn fc2_set_torch(camera: *mut fc2_camera, on: c_int);
     fn fc2_set_flash_mode(camera: *mut fc2_camera, mode: c_int);
+    fn fc2_set_auto_exposure(camera: *mut fc2_camera);
+    fn fc2_set_manual_exposure(camera: *mut fc2_camera, iso: c_int, exposure_ns: c_longlong);
+    fn fc2_set_exposure_compensation(camera: *mut fc2_camera, steps: c_int);
+    fn fc2_set_ae_lock(camera: *mut fc2_camera, lock: c_int);
+    fn fc2_set_awb_lock(camera: *mut fc2_camera, lock: c_int);
+    fn fc2_set_focus_distance(camera: *mut fc2_camera, diopters: c_float);
+    fn fc2_manual_limits_get(camera: *mut fc2_camera, out: *mut fc2_manual_limits);
     fn fc2_jpeg_sizes(camera: *mut fc2_camera, out: *mut fc2_size, max: c_int) -> c_int;
     fn fc2_set_jpeg_size(camera: *mut fc2_camera, width: c_int, height: c_int);
     fn fc2_set_jpeg_quality(camera: *mut fc2_camera, quality: c_int);
@@ -490,6 +511,61 @@ impl CameraBackend for Camera2Backend {
     fn set_flash_mode(&mut self, mode: i32) {
         if !self.raw.is_null() {
             unsafe { fc2_set_flash_mode(self.raw, mode) };
+        }
+    }
+
+    fn set_auto_exposure(&mut self) {
+        if !self.raw.is_null() {
+            unsafe { fc2_set_auto_exposure(self.raw) };
+        }
+    }
+
+    fn set_manual_exposure(&mut self, iso: i32, exposure_ns: i64) {
+        if !self.raw.is_null() {
+            unsafe { fc2_set_manual_exposure(self.raw, iso, exposure_ns) };
+        }
+    }
+
+    fn set_exposure_compensation(&mut self, steps: i32) {
+        if !self.raw.is_null() {
+            unsafe { fc2_set_exposure_compensation(self.raw, steps) };
+        }
+    }
+
+    fn set_ae_lock(&mut self, lock: bool) {
+        if !self.raw.is_null() {
+            unsafe { fc2_set_ae_lock(self.raw, lock as c_int) };
+        }
+    }
+
+    fn set_awb_lock(&mut self, lock: bool) {
+        if !self.raw.is_null() {
+            unsafe { fc2_set_awb_lock(self.raw, lock as c_int) };
+        }
+    }
+
+    fn set_focus_distance(&mut self, diopters: f32) {
+        if !self.raw.is_null() {
+            unsafe { fc2_set_focus_distance(self.raw, diopters) };
+        }
+    }
+
+    fn manual_controls(&self) -> crate::camera::ManualControls {
+        if self.raw.is_null() {
+            return crate::camera::ManualControls::default();
+        }
+        let mut limits = fc2_manual_limits::default();
+        unsafe { fc2_manual_limits_get(self.raw, &mut limits) };
+        crate::camera::ManualControls {
+            supported: limits.supported != 0,
+            iso_min: limits.iso_min,
+            iso_max: limits.iso_max,
+            exposure_min_ns: limits.exposure_min_ns,
+            exposure_max_ns: limits.exposure_max_ns,
+            ev_min: limits.ev_min,
+            ev_max: limits.ev_max,
+            ev_step: limits.ev_step,
+            min_focus_distance: limits.min_focus_distance,
         }
     }
 }

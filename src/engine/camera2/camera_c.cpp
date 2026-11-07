@@ -210,6 +210,41 @@ void fc2_set_manual_exposure(fc2_camera* c, int iso, int64_t exposure_ns)
         c->session.setManualExposure(iso, exposure_ns);
 }
 
+void fc2_set_exposure_compensation(fc2_camera* c, int steps)
+{
+    if (c)
+        c->session.setExposureCompensation(steps);
+}
+
+void fc2_set_focus_distance(fc2_camera* c, float diopters)
+{
+    if (c)
+        c->session.setFocusDistance(diopters);
+}
+
+void fc2_manual_limits_get(fc2_camera* c, fc2_manual_limits* out)
+{
+    if (!out)
+        return;
+    *out = fc2_manual_limits{};
+    if (!c)
+        return;
+
+    const CameraSession::CameraInfo* info = c->session.activeInfo();
+    if (!info)
+        return;
+
+    out->supported          = info->manualSensor ? 1 : 0;
+    out->iso_min            = info->isoMin;
+    out->iso_max            = info->isoMax;
+    out->exposure_min_ns    = info->exposureMinNs;
+    out->exposure_max_ns    = info->exposureMaxNs;
+    out->ev_min             = info->evCompMin;
+    out->ev_max             = info->evCompMax;
+    out->ev_step            = info->evCompStep;
+    out->min_focus_distance = info->minFocusDistance;
+}
+
 void fc2_set_focus_point(fc2_camera* c, float x, float y) { if (c) c->session.setFocusPoint(x, y); }
 int  fc2_focus_assist_lit(fc2_camera* c)
 {

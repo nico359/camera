@@ -20,6 +20,20 @@ pub enum Facing {
     Back,
 }
 
+/// Manual-control limits advertised by the open camera.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct ManualControls {
+    pub supported: bool,
+    pub iso_min: i32,
+    pub iso_max: i32,
+    pub exposure_min_ns: i64,
+    pub exposure_max_ns: i64,
+    pub ev_min: i32,
+    pub ev_max: i32,
+    pub ev_step: f32,
+    pub min_focus_distance: f32,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CameraInfo {
     pub id: String,
@@ -128,6 +142,13 @@ pub trait CameraBackend {
     fn clear_focus_assist(&mut self);
     fn set_torch(&mut self, on: bool);
     fn set_flash_mode(&mut self, mode: i32);
+    fn set_auto_exposure(&mut self);
+    fn set_manual_exposure(&mut self, iso: i32, exposure_ns: i64);
+    fn set_exposure_compensation(&mut self, steps: i32);
+    fn set_ae_lock(&mut self, lock: bool);
+    fn set_awb_lock(&mut self, lock: bool);
+    fn set_focus_distance(&mut self, diopters: f32);
+    fn manual_controls(&self) -> ManualControls;
 }
 
 fn create_backend(photo_sink: PhotoSink) -> Result<Box<dyn CameraBackend>, CameraError> {
@@ -464,6 +485,49 @@ impl CameraSession {
         if let Some(backend) = self.backend.as_mut() {
             backend.set_flash_mode(mode);
         }
+    }
+
+    pub fn set_auto_exposure(&mut self) {
+        if let Some(backend) = self.backend.as_mut() {
+            backend.set_auto_exposure();
+        }
+    }
+
+    pub fn set_manual_exposure(&mut self, iso: i32, exposure_ns: i64) {
+        if let Some(backend) = self.backend.as_mut() {
+            backend.set_manual_exposure(iso, exposure_ns);
+        }
+    }
+
+    pub fn set_exposure_compensation(&mut self, steps: i32) {
+        if let Some(backend) = self.backend.as_mut() {
+            backend.set_exposure_compensation(steps);
+        }
+    }
+
+    pub fn set_ae_lock(&mut self, lock: bool) {
+        if let Some(backend) = self.backend.as_mut() {
+            backend.set_ae_lock(lock);
+        }
+    }
+
+    pub fn set_awb_lock(&mut self, lock: bool) {
+        if let Some(backend) = self.backend.as_mut() {
+            backend.set_awb_lock(lock);
+        }
+    }
+
+    pub fn set_focus_distance(&mut self, diopters: f32) {
+        if let Some(backend) = self.backend.as_mut() {
+            backend.set_focus_distance(diopters);
+        }
+    }
+
+    pub fn manual_controls(&self) -> ManualControls {
+        self.backend
+            .as_ref()
+            .map(|backend| backend.manual_controls())
+            .unwrap_or_default()
     }
 
     pub fn close(&mut self) {

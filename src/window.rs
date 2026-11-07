@@ -167,6 +167,39 @@ mod imp {
         #[template_child]
         pub gps_indicator: TemplateChild<gtk::Image>,
 
+        #[template_child]
+        pub manual_controls_button: TemplateChild<gtk::ToggleButton>,
+
+        #[template_child]
+        pub manual_revealer: TemplateChild<gtk::Revealer>,
+
+        #[template_child]
+        pub manual_exposure_switch: TemplateChild<gtk::Switch>,
+
+        #[template_child]
+        pub iso_scale: TemplateChild<gtk::Scale>,
+
+        #[template_child]
+        pub iso_value: TemplateChild<gtk::Label>,
+
+        #[template_child]
+        pub shutter_scale: TemplateChild<gtk::Scale>,
+
+        #[template_child]
+        pub shutter_value: TemplateChild<gtk::Label>,
+
+        #[template_child]
+        pub ev_scale: TemplateChild<gtk::Scale>,
+
+        #[template_child]
+        pub ev_value: TemplateChild<gtk::Label>,
+
+        #[template_child]
+        pub ae_lock_button: TemplateChild<gtk::ToggleButton>,
+
+        #[template_child]
+        pub awb_lock_button: TemplateChild<gtk::ToggleButton>,
+
         pub(super) capture_action: RefCell<Option<gio::SimpleAction>>,
         pub(super) switch_action: RefCell<Option<gio::SimpleAction>>,
         pub(super) select_action: RefCell<Option<gio::SimpleAction>>,
@@ -187,6 +220,7 @@ mod imp {
         pub(super) location_rx:
             RefCell<Option<std::sync::mpsc::Receiver<crate::location::LocationFix>>>,
         pub(super) location_fix: RefCell<Option<crate::location::LocationFix>>,
+        pub(super) manual_limits: RefCell<crate::camera::ManualControls>,
     }
 
     #[glib::object_subclass]
@@ -213,6 +247,7 @@ mod imp {
             self.setup_gestures();
             self.setup_grid();
             self.setup_level();
+            self.setup_manual();
             self.setup_location();
             self.obj().load_latest_media();
         }
@@ -287,6 +322,63 @@ mod imp {
                         }
                     }
                 });
+        }
+
+        fn setup_manual(&self) {
+            let weak = self.obj().downgrade();
+            self.manual_controls_button.connect_toggled(move |button| {
+                if let Some(window) = weak.upgrade() {
+                    window
+                        .imp()
+                        .manual_revealer
+                        .set_reveal_child(button.is_active());
+                }
+            });
+
+            let weak = self.obj().downgrade();
+            self.manual_exposure_switch.connect_active_notify(move |_| {
+                if let Some(window) = weak.upgrade() {
+                    window.apply_manual_exposure();
+                }
+            });
+
+            for scale in [&self.iso_scale, &self.shutter_scale] {
+                let weak = self.obj().downgrade();
+                scale.connect_value_changed(move |_| {
+                    if let Some(window) = weak.upgrade() {
+                        window.apply_manual_exposure();
+                    }
+                });
+            }
+
+            let weak = self.obj().downgrade();
+            self.ev_scale.connect_value_changed(move |_| {
+                if let Some(window) = weak.upgrade() {
+                    window.apply_exposure_compensation();
+                }
+            });
+
+            let weak = self.obj().downgrade();
+            self.ae_lock_button.connect_toggled(move |button| {
+                if let Some(window) = weak.upgrade() {
+                    window
+                        .imp()
+                        .camera_view
+                        .get()
+                        .set_ae_lock(button.is_active());
+                }
+            });
+
+            let weak = self.obj().downgrade();
+            self.awb_lock_button.connect_toggled(move |button| {
+                if let Some(window) = weak.upgrade() {
+                    window
+                        .imp()
+                        .camera_view
+                        .get()
+                        .set_awb_lock(button.is_active());
+                }
+            });
         }
 
         fn setup_location(&self) {
@@ -423,6 +515,16 @@ mod imp {
             });
             window.add_action(&gallery);
 
+            let manual = gio::SimpleAction::new("manual-controls", None);
+            let weak = window.downgrade();
+            manual.connect_activate(move |_, _| {
+                if let Some(window) = weak.upgrade() {
+                    let button = window.imp().manual_controls_button.get();
+                    button.set_active(!button.is_active());
+                }
+            });
+            window.add_action(&manual);
+
             let thumbnail = gio::SimpleAction::new("thumbnail", None);
             let settings = self.settings.clone();
             let weak = window.downgrade();
@@ -475,6 +577,7 @@ mod imp {
                         window.update_camera_menu();
                     }
                     window.update_mode_ui();
+                    window.update_manual_controls();
                 }
             });
 
@@ -596,6 +699,90 @@ mod imp {
     }
 }
 
+fn iso_bounds(limits: crate::camera::ManualControls) -> (f64, f64) {
+    let min = limits.iso_min.max(1) as f64;
+    let max = limits.iso_max.max(limits.iso_min + 1) as f64;
+    (min, max)
+}
+
+fn iso_from_slider(limits: crate::camera::ManualControls, t: f64) -> i32 {
+    let (min, max) = iso_bounds(limits);
+    if max <= min {
+        return min as i32;
+    }
+    (min * (max / min).powf(t.clamp(0.0, 1.0))).round() as i32
+}
+
+fn slider_from_iso(limits: crate::camera::ManualControls, iso: i32) -> f64 {
+    let (min, max) = iso_bounds(limits);
+    if max <= min {
+        return 0.5;
+    }
+    ((iso.max(min as i32) as f64 / min).ln() / (max / min).ln()).clamp(0.0, 1.0)
+}
+
+fn ns_bounds(limits: crate::camera::ManualControls) -> (f64, f64) {
+    let min = limits.exposure_min_ns.max(1) as f64;
+    let max = limits.exposure_max_ns.max(limits.exposure_min_ns + 1) as f64;
+    (min, max)
+}
+
+fn ns_from_slider(limits: crate::camera::ManualControls, t: f64) -> i64 {
+    let (min, max) = ns_bounds(limits);
+    if max <= min {
+        return min as i64;
+    }
+    (min * (max / min).powf(t.clamp(0.0, 1.0))).round() as i64
+}
+
+fn slider_from_ns(limits: crate::camera::ManualControls, ns: i64) -> f64 {
+    let (min, max) = ns_bounds(limits);
+    if max <= min {
+        return 0.5;
+    }
+    ((ns.max(min as i64) as f64 / min).ln() / (max / min).ln()).clamp(0.0, 1.0)
+}
+
+fn format_shutter(ns: i64) -> String {
+    let ns = ns.max(1);
+    if ns >= 500_000_000 {
+        format!("{:.1} s", ns as f64 / 1_000_000_000.0)
+    } else {
+        format!("1/{:.0} s", 1_000_000_000.0 / ns as f64)
+    }
+}
+
+fn ev_steps_from_slider(limits: crate::camera::ManualControls, t: f64) -> i32 {
+    if limits.ev_max <= limits.ev_min {
+        return 0;
+    }
+    let span = (limits.ev_max - limits.ev_min) as f64;
+    limits.ev_min + (t.clamp(0.0, 1.0) * span).round() as i32
+}
+
+fn ev_from_slider(limits: crate::camera::ManualControls, t: f64) -> f32 {
+    let step = if limits.ev_step > 0.0 {
+        limits.ev_step
+    } else {
+        1.0 / 3.0
+    };
+    ev_steps_from_slider(limits, t) as f32 * step
+}
+
+fn slider_from_ev(limits: crate::camera::ManualControls, ev: f32) -> f64 {
+    let step = if limits.ev_step > 0.0 {
+        limits.ev_step
+    } else {
+        1.0 / 3.0
+    };
+    let lo = limits.ev_min as f32 * step;
+    let hi = limits.ev_max as f32 * step;
+    if hi <= lo {
+        return 0.5;
+    }
+    ((ev - lo) / (hi - lo)).clamp(0.0, 1.0) as f64
+}
+
 glib::wrapper! {
     pub struct CameraWindow(ObjectSubclass<imp::CameraWindow>)
         @extends gtk::Widget, gtk::Window, gtk::ApplicationWindow, adw::ApplicationWindow,
@@ -669,9 +856,11 @@ impl CameraWindow {
         match view.set_video_mode(enabled) {
             Ok(()) => {
                 self.update_mode_ui();
+                self.update_manual_controls();
             }
             Err(error) => {
                 self.update_mode_ui();
+                self.update_manual_controls();
                 self.show_toast(&format!("{}: {error}", gettext("Could not switch mode")));
             }
         }
@@ -1026,6 +1215,7 @@ impl CameraWindow {
             }
         }
         self.update_mode_ui();
+        self.update_manual_controls();
     }
 
     fn select_camera(&self, index: usize) {
@@ -1050,6 +1240,95 @@ impl CameraWindow {
             }
         }
         self.update_mode_ui();
+    }
+
+    fn update_manual_controls(&self) {
+        let imp = self.imp();
+        let view = imp.camera_view.get();
+        let limits = if view.ready() {
+            view.manual_controls()
+        } else {
+            crate::camera::ManualControls::default()
+        };
+        *imp.manual_limits.borrow_mut() = limits;
+
+        if !view.ready() {
+            imp.manual_exposure_switch.set_sensitive(false);
+            imp.iso_scale.set_sensitive(false);
+            imp.shutter_scale.set_sensitive(false);
+            imp.ev_scale.set_sensitive(false);
+            return;
+        }
+
+        // A camera or mode change invalidates the old exposure values.
+        imp.manual_exposure_switch.set_active(false);
+        imp.iso_scale.set_value(slider_from_iso(limits, 400));
+        imp.shutter_scale
+            .set_value(slider_from_ns(limits, 16_666_667));
+        imp.ev_scale.set_value(slider_from_ev(limits, 0.0));
+        imp.ae_lock_button.set_active(false);
+        imp.awb_lock_button.set_active(false);
+        view.set_auto_exposure();
+        view.set_ae_lock(false);
+        view.set_awb_lock(false);
+
+        imp.manual_exposure_switch.set_sensitive(limits.supported);
+        self.update_manual_labels();
+        self.update_manual_sensitivity();
+    }
+
+    fn update_manual_sensitivity(&self) {
+        let imp = self.imp();
+        let limits = *imp.manual_limits.borrow();
+        let manual = limits.supported && imp.manual_exposure_switch.is_active();
+        imp.iso_scale.set_sensitive(manual);
+        imp.shutter_scale.set_sensitive(manual);
+        imp.ev_scale
+            .set_sensitive(limits.ev_max > limits.ev_min && !manual);
+    }
+
+    fn update_manual_labels(&self) {
+        let imp = self.imp();
+        let limits = *imp.manual_limits.borrow();
+
+        let iso = iso_from_slider(limits, imp.iso_scale.value());
+        imp.iso_value.set_label(&format!("ISO {iso}"));
+
+        let ns = ns_from_slider(limits, imp.shutter_scale.value());
+        imp.shutter_value.set_label(&format_shutter(ns));
+
+        let ev = ev_from_slider(limits, imp.ev_scale.value());
+        imp.ev_value.set_label(&format!("{ev:+.1} EV"));
+    }
+
+    fn apply_manual_exposure(&self) {
+        let imp = self.imp();
+        let limits = *imp.manual_limits.borrow();
+        let view = imp.camera_view.get();
+        if !view.ready() {
+            return;
+        }
+
+        if limits.supported && imp.manual_exposure_switch.is_active() {
+            let iso = iso_from_slider(limits, imp.iso_scale.value());
+            let ns = ns_from_slider(limits, imp.shutter_scale.value());
+            view.set_manual_exposure(iso, ns);
+        } else {
+            view.set_auto_exposure();
+        }
+        self.update_manual_labels();
+        self.update_manual_sensitivity();
+    }
+
+    fn apply_exposure_compensation(&self) {
+        let imp = self.imp();
+        let limits = *imp.manual_limits.borrow();
+        if limits.ev_max <= limits.ev_min {
+            return;
+        }
+        let steps = ev_steps_from_slider(limits, imp.ev_scale.value());
+        imp.camera_view.get().set_exposure_compensation(steps);
+        self.update_manual_labels();
     }
 
     fn update_camera_menu(&self) {

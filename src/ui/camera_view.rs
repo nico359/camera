@@ -628,6 +628,40 @@ impl CameraView {
         self.imp().session.borrow().max_zoom().max(1.0)
     }
 
+    pub fn manual_controls(&self) -> crate::camera::ManualControls {
+        self.imp().session.borrow().manual_controls()
+    }
+
+    pub fn set_auto_exposure(&self) {
+        self.imp().session.borrow_mut().set_auto_exposure();
+    }
+
+    pub fn set_manual_exposure(&self, iso: i32, exposure_ns: i64) {
+        self.imp()
+            .session
+            .borrow_mut()
+            .set_manual_exposure(iso, exposure_ns);
+    }
+
+    pub fn set_exposure_compensation(&self, steps: i32) {
+        self.imp()
+            .session
+            .borrow_mut()
+            .set_exposure_compensation(steps);
+    }
+
+    pub fn set_ae_lock(&self, lock: bool) {
+        self.imp().session.borrow_mut().set_ae_lock(lock);
+    }
+
+    pub fn set_awb_lock(&self, lock: bool) {
+        self.imp().session.borrow_mut().set_awb_lock(lock);
+    }
+
+    pub fn set_focus_distance(&self, diopters: f32) {
+        self.imp().session.borrow_mut().set_focus_distance(diopters);
+    }
+
     pub fn set_zoom(&self, zoom: f32) {
         let zoom = zoom.clamp(1.0, self.max_zoom());
         self.imp().session.borrow_mut().set_zoom(zoom);

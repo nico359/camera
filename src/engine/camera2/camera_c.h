@@ -87,6 +87,25 @@ void  fc2_set_ae_lock(fc2_camera* c, int lock);
 void  fc2_set_awb_lock(fc2_camera* c, int lock);
 void  fc2_set_auto_exposure(fc2_camera* c);
 void  fc2_set_manual_exposure(fc2_camera* c, int iso, int64_t exposure_ns);
+void  fc2_set_exposure_compensation(fc2_camera* c, int steps);
+void  fc2_set_focus_distance(fc2_camera* c, float diopters);
+
+/* Manual-control capabilities of the open camera.  A zeroed `supported`
+ * means the camera lacks the MANUAL_SENSOR capability; the EV range may still
+ * be usable in auto exposure. */
+typedef struct fc2_manual_limits {
+    int     supported;
+    int     iso_min;
+    int     iso_max;
+    int64_t exposure_min_ns;
+    int64_t exposure_max_ns;
+    int     ev_min;
+    int     ev_max;
+    float   ev_step;
+    float   min_focus_distance;  /* diopters, 0 = fixed focus */
+} fc2_manual_limits;
+
+void  fc2_manual_limits_get(fc2_camera* c, fc2_manual_limits* out);
 void  fc2_set_focus_point(fc2_camera* c, float x, float y); /* normalized [0,1] */
 
 /* Still JPEG output sizes and quality.  Sizes are the camera's advertised
