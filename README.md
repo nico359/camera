@@ -38,9 +38,12 @@ Flatpak. Feature parity with FuriCam or at least close to it is planned. Might a
   location only when the fix is fresh and (by default) accurate to 10 m, and
   never reuses a stale fix. A header indicator shows the current fix; videos
   are not tagged yet
-- a Pro panel with logarithmic ISO and shutter sliders, an Auto mode toggle,
-  AE/AWB locks, and an iOS-style EV control next to the tap-to-focus rectangle;
-  ranges come from the active camera and reset on camera/mode changes
+- a translucent, rounded Pro panel with logarithmic ISO and shutter sliders,
+  an Auto mode toggle and AE/AWB locks; ranges come from the active camera and
+  reset on camera/mode changes. For tall aspects such as 4:3 the preview moves
+  up above the panel; 16:9 keeps its full-height preview with the panel
+  overlaid. EV compensation is a narrow iOS-style vertical control centred next
+  to the tap-to-focus rectangle, synced to the reticle; drag up to brighten
 - black preview canvas and header bar; the preview sits above a dedicated
   control bar, so it is centered between the header and the shutter row rather
   than behind the controls
