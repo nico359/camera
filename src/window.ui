@@ -252,6 +252,7 @@
                         <property name="valign">start</property>
                         <property name="orientation">vertical</property>
                         <property name="spacing">2</property>
+                        <property name="height-request">150</property>
                         <style>
                           <class name="ev-control"/>
                         </style>
@@ -276,15 +277,6 @@
                                 <property name="page-increment">1</property>
                               </object>
                             </property>
-                          </object>
-                        </child>
-                        <child>
-                          <object class="GtkLabel" id="ev_touch_value">
-                            <property name="label">+0.0 EV</property>
-                            <property name="xalign">0.5</property>
-                            <style>
-                              <class name="caption"/>
-                            </style>
                           </object>
                         </child>
                       </object>

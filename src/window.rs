@@ -195,9 +195,6 @@ mod imp {
         pub ev_touch_scale: TemplateChild<gtk::Scale>,
 
         #[template_child]
-        pub ev_touch_value: TemplateChild<gtk::Label>,
-
-        #[template_child]
         pub ae_lock_button: TemplateChild<gtk::ToggleButton>,
 
         #[template_child]
@@ -226,7 +223,6 @@ mod imp {
         pub(super) manual_limits: RefCell<crate::camera::ManualControls>,
         pub(super) manual_active: Cell<bool>,
         pub(super) manual_syncing: Cell<bool>,
-        pub(super) ev_generation: Cell<u64>,
     }
 
     #[glib::object_subclass]
@@ -338,6 +334,7 @@ mod imp {
                         .imp()
                         .manual_revealer
                         .set_reveal_child(button.is_active());
+                    window.update_preview_panel_margin(button.is_active());
                 }
             });
 
@@ -1065,40 +1062,37 @@ impl CameraWindow {
         reticle.set_margin_top(top);
         reticle.set_visible(true);
 
-        // iOS-style exposure control next to the focus rectangle. It stays a
-        // little longer than the reticle so it can be dragged.
+        // iOS-style exposure control centred next to the focus rectangle and
+        // shown for the same 2 s as the reticle.
         let imp = self.imp();
         let limits = *imp.manual_limits.borrow();
         if limits.ev_max > limits.ev_min && !imp.manual_active.get() {
             let ev = imp.ev_control.get();
+            let ev_height = 150.0;
             let ev_left = (left + size as i32 + 8).clamp(0, (overlay.width() - 64).max(0));
-            let ev_top = top.clamp(0, (overlay.height() - 190).max(0));
+            let ev_top = ((top as f64 + size / 2.0 - ev_height / 2.0)
+                .clamp(0.0, (overlay.height() as f64 - ev_height).max(0.0)))
+                as i32;
             ev.set_margin_start(ev_left);
             ev.set_margin_top(ev_top);
             ev.set_visible(true);
-
-            let generation = imp.ev_generation.get() + 1;
-            imp.ev_generation.set(generation);
-            let weak = self.downgrade();
-            glib::timeout_add_local_once(Duration::from_secs(4), move || {
-                if let Some(window) = weak.upgrade() {
-                    if window.imp().ev_generation.get() == generation {
-                        window.imp().ev_control.set_visible(false);
-                    }
-                }
-            });
         } else {
             imp.ev_control.set_visible(false);
         }
 
+        self.restart_focus_timeout();
+    }
+
+    fn restart_focus_timeout(&self) {
         if let Some(id) = self.imp().focus_tick.borrow_mut().take() {
             id.remove();
         }
 
         let weak = self.downgrade();
-        let id = glib::timeout_add_local(Duration::from_millis(1200), move || {
+        let id = glib::timeout_add_local(Duration::from_secs(2), move || {
             if let Some(window) = weak.upgrade() {
                 window.imp().focus_reticle.set_visible(false);
+                window.imp().ev_control.set_visible(false);
                 *window.imp().focus_tick.borrow_mut() = None;
             }
             glib::ControlFlow::Break
@@ -1253,6 +1247,49 @@ impl CameraWindow {
         self.update_mode_ui();
     }
 
+    /// Reserve space below the preview for the Pro panel only when the current
+    /// preview aspect leaves vertical slack (e.g. 4:3). 16:9 is height-limited,
+    /// so the panel overlays it instead of shrinking the image.
+    fn update_preview_panel_margin(&self, open: bool) {
+        let imp = self.imp();
+        let frame = imp.preview_frame.get();
+        if !open {
+            frame.set_margin_bottom(0);
+            return;
+        }
+
+        let view = imp.camera_view.get();
+        let overlay = imp.preview_overlay.get();
+        let width = overlay.width() as f64;
+        let height = overlay.height() as f64;
+        let aspect = view.preview_aspect() as f64;
+        if width <= 0.0 || height <= 0.0 || aspect <= 0.0 {
+            frame.set_margin_bottom(0);
+            return;
+        }
+
+        let image_height = if aspect >= width / height {
+            height
+        } else {
+            width / aspect
+        };
+        let slack = (height - image_height).max(0.0);
+        let panel_height = imp
+            .manual_revealer
+            .child()
+            .map(|child| child.measure(gtk::Orientation::Vertical, -1).1)
+            .unwrap_or(0) as f64;
+        // Offset the preview only when the panel fits entirely in the vertical
+        // slack. If reserving it would shrink the image, overlay the panel
+        // instead (e.g. 16:9, which is height-limited).
+        let margin = if panel_height > 0.0 && slack >= panel_height {
+            panel_height
+        } else {
+            0.0
+        };
+        frame.set_margin_bottom(margin.round() as i32);
+    }
+
     fn update_manual_controls(&self) {
         let imp = self.imp();
         let view = imp.camera_view.get();
@@ -1287,13 +1324,12 @@ impl CameraWindow {
         ev.set_lower(limits.ev_min as f64);
         ev.set_upper(limits.ev_max as f64);
         ev.set_value(0.0);
-        imp.ev_touch_value.set_label("+0.0 EV");
         imp.ev_control.set_visible(false);
-        imp.ev_generation.set(imp.ev_generation.get() + 1);
         imp.manual_syncing.set(false);
 
         self.update_manual_labels();
         self.update_manual_sensitivity();
+        self.update_preview_panel_margin(imp.manual_revealer.reveals_child());
     }
 
     fn update_manual_sensitivity(&self) {
@@ -1339,15 +1375,13 @@ impl CameraWindow {
         if limits.ev_max <= limits.ev_min || imp.manual_active.get() {
             return;
         }
-        let steps = imp.ev_touch_scale.value().round() as i32;
+
+        // The HAL's EV index runs opposite to the slider: dragging up should
+        // brighten, so negate the index while keeping the slider's direction.
+        let steps =
+            (-(imp.ev_touch_scale.value().round() as i32)).clamp(limits.ev_min, limits.ev_max);
         imp.camera_view.get().set_exposure_compensation(steps);
-        let step = if limits.ev_step > 0.0 {
-            limits.ev_step
-        } else {
-            1.0 / 3.0
-        };
-        imp.ev_touch_value
-            .set_label(&format!("{:+.1} EV", steps as f32 * step));
+        self.restart_focus_timeout();
     }
 
     fn update_camera_menu(&self) {
