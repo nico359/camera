@@ -34,6 +34,13 @@ Flatpak. Feature parity with FuriCam or at least close to it is planned. Might a
   forces the portal app chooser for external opens. On a keyboard, the arrow
   keys change pages, Space/Return play or pause a video, and Escape closes the
   viewer
+- optional GPS tagging for photos: uses the system location service, writes a
+  location only when the fix is fresh and (by default) accurate to 10 m, and
+  never reuses a stale fix. A header indicator shows the current fix; videos
+  are not tagged yet
+- a Pro panel with logarithmic ISO and shutter sliders, an Auto mode toggle,
+  AE/AWB locks, and an iOS-style EV control next to the tap-to-focus rectangle;
+  ranges come from the active camera and reset on camera/mode changes
 - black preview canvas and header bar; the preview sits above a dedicated
   control bar, so it is centered between the header and the shutter row rather
   than behind the controls
@@ -74,10 +81,9 @@ Flatpak. Feature parity with FuriCam or at least close to it is planned. Might a
 
 Not implemented yet:
 
-- richer gallery features (delete/share, pinch/double-tap zoom, persistent
-  photo thumbnails), HDR, RAW, and the manual exposure/ISO/shutter “pro”
-  controls.
-  The engine already exposes most of these through its C API; the UI is the
+- richer gallery features (delete/share, event-level double-tap zoom,
+  persistent photo thumbnails), video GPS tags, manual focus, HDR and RAW. The
+  engine already exposes most of these through its C API; the UI is the
   remaining work.
 
 Known limitations:
@@ -94,8 +100,9 @@ Known limitations:
 - GPS tagging needs the system location permission and a fresh fix. Indoors the
   phone often gets no fix; those photos are saved without a location rather
   than with a wrong one.
-- Manual exposure is reset to auto on camera or mode changes, and manual focus
-  is not exposed in the UI yet.
+- Manual exposure is reset to auto on camera or mode changes. Manual focus is
+  exposed by the engine but not in the UI yet; it is reported unreliable on
+  this phone.
 - The gallery is read-only for now: no delete/share, and video playback depends
   on the runtime's GStreamer H.264/AAC decoders (present on FuriOS).
 - The preview is portrait-locked by design; saved photos and videos follow the
