@@ -156,6 +156,9 @@ mod imp {
         pub focus_reticle: TemplateChild<gtk::Box>,
 
         #[template_child]
+        pub preview_panel_spacer: TemplateChild<gtk::Box>,
+
+        #[template_child]
         pub status_label: TemplateChild<gtk::Label>,
 
         #[template_child]
@@ -1252,42 +1255,18 @@ impl CameraWindow {
     /// so the panel overlays it instead of shrinking the image.
     fn update_preview_panel_margin(&self, open: bool) {
         let imp = self.imp();
-        let frame = imp.preview_frame.get();
+        let spacer = imp.preview_panel_spacer.get();
         if !open {
-            frame.set_margin_bottom(0);
+            spacer.set_size_request(-1, 0);
             return;
         }
 
-        let view = imp.camera_view.get();
-        let overlay = imp.preview_overlay.get();
-        let width = overlay.width() as f64;
-        let height = overlay.height() as f64;
-        let aspect = view.preview_aspect() as f64;
-        if width <= 0.0 || height <= 0.0 || aspect <= 0.0 {
-            frame.set_margin_bottom(0);
-            return;
-        }
-
-        let image_height = if aspect >= width / height {
-            height
-        } else {
-            width / aspect
-        };
-        let slack = (height - image_height).max(0.0);
-        let panel_height = imp
-            .manual_revealer
-            .child()
-            .map(|child| child.measure(gtk::Orientation::Vertical, -1).1)
-            .unwrap_or(0) as f64;
-        // Offset the preview only when the panel fits entirely in the vertical
-        // slack. If reserving it would shrink the image, overlay the panel
-        // instead (e.g. 16:9, which is height-limited).
-        let margin = if panel_height > 0.0 && slack >= panel_height {
-            panel_height
-        } else {
-            0.0
-        };
-        frame.set_margin_bottom(margin.round() as i32);
+        // Portrait 4:3, 5:4, 1:1 and similar leave vertical slack, so reserve
+        // the panel's height and move the preview up. 16:9 is height-limited,
+        // so the panel overlays it instead of shrinking the image.
+        let aspect = imp.camera_view.get().preview_aspect();
+        let reserve = if aspect > 0.65 { 220 } else { 0 };
+        spacer.set_size_request(-1, reserve);
     }
 
     fn update_manual_controls(&self) {

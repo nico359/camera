@@ -92,6 +92,11 @@
                               <class name="camera-background"/>
                             </style>
                         <property name="child">
+                          <object class="GtkBox">
+                            <property name="orientation">vertical</property>
+                            <property name="hexpand">True</property>
+                            <property name="vexpand">True</property>
+                            <child>
                           <object class="GtkAspectFrame" id="preview_frame">
                             <property name="ratio">0.75</property>
                             <property name="obey-child">False</property>
@@ -125,6 +130,13 @@
                                 </child>
                               </object>
                             </property>
+                          </object>
+                            </child>
+                            <child>
+                              <object class="GtkBox" id="preview_panel_spacer">
+                                <property name="height-request">0</property>
+                              </object>
+                            </child>
                           </object>
                         </property>
                     <child type="overlay">
