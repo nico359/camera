@@ -50,6 +50,14 @@
                       </object>
                     </child>
                     <child type="end">
+                      <object class="GtkMenuButton">
+                        <property name="primary">True</property>
+                        <property name="icon-name">open-menu-symbolic</property>
+                        <property name="tooltip-text" translatable="yes">Main Menu</property>
+                        <property name="menu-model">primary_menu</property>
+                      </object>
+                    </child>
+                    <child type="end">
                       <object class="GtkToggleButton" id="manual_controls_button">
                         <property name="tooltip-text" translatable="yes">Manual Controls</property>
                         <property name="valign">center</property>
@@ -57,19 +65,13 @@
                           <class name="flat"/>
                         </style>
                         <child>
-                          <object class="GtkImage">
-                            <property name="icon-name">emblem-system-symbolic</property>
-                            <property name="pixel-size">16</property>
+                          <object class="GtkLabel">
+                            <property name="label" translatable="yes">Pro</property>
+                            <style>
+                              <class name="pro-label"/>
+                            </style>
                           </object>
                         </child>
-                      </object>
-                    </child>
-                    <child type="end">
-                      <object class="GtkMenuButton">
-                        <property name="primary">True</property>
-                        <property name="icon-name">open-menu-symbolic</property>
-                        <property name="tooltip-text" translatable="yes">Main Menu</property>
-                        <property name="menu-model">primary_menu</property>
                       </object>
                     </child>
                   </object>
@@ -125,81 +127,10 @@
                             </property>
                           </object>
                         </property>
-                        <child type="overlay">
-                          <object class="GtkLabel" id="status_label">
-                            <property name="label" translatable="yes">Starting camera…</property>
-                            <property name="can-target">False</property>
-                            <property name="halign">center</property>
-                            <property name="valign">center</property>
-                            <property name="justify">center</property>
-                            <property name="wrap">True</property>
-                            <property name="max-width-chars">40</property>
-                            <property name="margin-start">24</property>
-                            <property name="margin-end">24</property>
-                            <style>
-                              <class name="title-4"/>
-                              <class name="osd"/>
-                            </style>
-                          </object>
-                        </child>
-                        <child type="overlay">
-                          <object class="GtkLabel" id="recording_label">
-                            <property name="visible">False</property>
-                            <property name="can-target">False</property>
-                            <property name="halign">center</property>
-                            <property name="valign">start</property>
-                            <property name="margin-top">12</property>
-                            <style>
-                              <class name="title-4"/>
-                              <class name="osd"/>
-                              <class name="error"/>
-                            </style>
-                          </object>
-                        </child>
-                        <child type="overlay">
-                          <object class="GtkLabel" id="zoom_label">
-                            <property name="visible">False</property>
-                            <property name="can-target">False</property>
-                            <property name="halign">end</property>
-                            <property name="valign">start</property>
-                            <property name="margin-top">12</property>
-                            <property name="margin-end">16</property>
-                            <style>
-                              <class name="title-4"/>
-                              <class name="osd"/>
-                            </style>
-                          </object>
-                        </child>
-                        <child type="overlay">
-                          <object class="GtkBox" id="focus_reticle">
-                            <property name="visible">False</property>
-                            <property name="can-target">False</property>
-                            <property name="halign">start</property>
-                            <property name="valign">start</property>
-                            <property name="width-request">64</property>
-                            <property name="height-request">64</property>
-                            <style>
-                              <class name="focus-reticle"/>
-                            </style>
-                          </object>
-                        </child>
-                        <child type="overlay">
-                          <object class="GtkBox" id="shutter_flash">
-                            <property name="can-target">False</property>
-                            <property name="opacity">0</property>
-                            <property name="hexpand">True</property>
-                            <property name="vexpand">True</property>
-                            <style>
-                              <class name="shutter-flash"/>
-                            </style>
-                          </object>
-                        </child>
-                          </object>
-                        </property>
-                      </object>
-                    </child>
-                    <child>
+                    <child type="overlay">
                       <object class="GtkRevealer" id="manual_revealer">
+                        <property name="halign">fill</property>
+                        <property name="valign">end</property>
                         <property name="transition-type">slide-up</property>
                         <property name="transition-duration">180</property>
                         <property name="reveal-child">False</property>
@@ -214,23 +145,6 @@
                             <property name="margin-end">18</property>
                             <property name="margin-top">8</property>
                             <property name="margin-bottom">6</property>
-                            <child>
-                              <object class="GtkBox">
-                                <property name="spacing">10</property>
-                                <child>
-                                  <object class="GtkLabel">
-                                    <property name="label" translatable="yes">Manual exposure</property>
-                                    <property name="hexpand">True</property>
-                                    <property name="xalign">0</property>
-                                  </object>
-                                </child>
-                                <child>
-                                  <object class="GtkSwitch" id="manual_exposure_switch">
-                                    <property name="valign">center</property>
-                                  </object>
-                                </child>
-                              </object>
-                            </child>
                             <child>
                               <object class="GtkBox">
                                 <property name="spacing">10</property>
@@ -305,43 +219,14 @@
                             </child>
                             <child>
                               <object class="GtkBox">
-                                <property name="spacing">10</property>
-                                <child>
-                                  <object class="GtkLabel">
-                                    <property name="label" translatable="yes">EV</property>
-                                    <property name="width-request">64</property>
-                                    <property name="xalign">0</property>
-                                  </object>
-                                </child>
-                                <child>
-                                  <object class="GtkScale" id="ev_scale">
-                                    <property name="hexpand">True</property>
-                                    <property name="draw-value">False</property>
-                                    <property name="adjustment">
-                                      <object class="GtkAdjustment">
-                                        <property name="lower">0</property>
-                                        <property name="upper">1</property>
-                                        <property name="value">0.5</property>
-                                        <property name="step-increment">0.01</property>
-                                      </object>
-                                    </property>
-                                  </object>
-                                </child>
-                                <child>
-                                  <object class="GtkLabel" id="ev_value">
-                                    <property name="label">+0.0 EV</property>
-                                    <property name="width-request">74</property>
-                                    <property name="xalign">1</property>
-                                    <style>
-                                      <class name="dim-label"/>
-                                    </style>
-                                  </object>
-                                </child>
-                              </object>
-                            </child>
-                            <child>
-                              <object class="GtkBox">
                                 <property name="spacing">8</property>
+                                <child>
+                                  <object class="GtkToggleButton" id="exposure_auto_button">
+                                    <property name="label" translatable="yes">Auto</property>
+                                    <property name="active">True</property>
+                                    <property name="hexpand">True</property>
+                                  </object>
+                                </child>
                                 <child>
                                   <object class="GtkToggleButton" id="ae_lock_button">
                                     <property name="label" translatable="yes">AE Lock</property>
@@ -358,6 +243,123 @@
                             </child>
                           </object>
                         </child>
+                      </object>
+                    </child>
+                    <child type="overlay">
+                      <object class="GtkBox" id="ev_control">
+                        <property name="visible">False</property>
+                        <property name="halign">start</property>
+                        <property name="valign">start</property>
+                        <property name="orientation">vertical</property>
+                        <property name="spacing">2</property>
+                        <style>
+                          <class name="ev-control"/>
+                        </style>
+                        <child>
+                          <object class="GtkImage">
+                            <property name="icon-name">display-brightness-symbolic</property>
+                            <property name="pixel-size">16</property>
+                          </object>
+                        </child>
+                        <child>
+                          <object class="GtkScale" id="ev_touch_scale">
+                            <property name="orientation">vertical</property>
+                            <property name="height-request">120</property>
+                            <property name="width-request">40</property>
+                            <property name="draw-value">False</property>
+                            <property name="adjustment">
+                              <object class="GtkAdjustment">
+                                <property name="lower">-12</property>
+                                <property name="upper">12</property>
+                                <property name="value">0</property>
+                                <property name="step-increment">1</property>
+                                <property name="page-increment">1</property>
+                              </object>
+                            </property>
+                          </object>
+                        </child>
+                        <child>
+                          <object class="GtkLabel" id="ev_touch_value">
+                            <property name="label">+0.0 EV</property>
+                            <property name="xalign">0.5</property>
+                            <style>
+                              <class name="caption"/>
+                            </style>
+                          </object>
+                        </child>
+                      </object>
+                    </child>
+                        <child type="overlay">
+                          <object class="GtkLabel" id="status_label">
+                            <property name="label" translatable="yes">Starting camera…</property>
+                            <property name="can-target">False</property>
+                            <property name="halign">center</property>
+                            <property name="valign">center</property>
+                            <property name="justify">center</property>
+                            <property name="wrap">True</property>
+                            <property name="max-width-chars">40</property>
+                            <property name="margin-start">24</property>
+                            <property name="margin-end">24</property>
+                            <style>
+                              <class name="title-4"/>
+                              <class name="osd"/>
+                            </style>
+                          </object>
+                        </child>
+                        <child type="overlay">
+                          <object class="GtkLabel" id="recording_label">
+                            <property name="visible">False</property>
+                            <property name="can-target">False</property>
+                            <property name="halign">center</property>
+                            <property name="valign">start</property>
+                            <property name="margin-top">12</property>
+                            <style>
+                              <class name="title-4"/>
+                              <class name="osd"/>
+                              <class name="error"/>
+                            </style>
+                          </object>
+                        </child>
+                        <child type="overlay">
+                          <object class="GtkLabel" id="zoom_label">
+                            <property name="visible">False</property>
+                            <property name="can-target">False</property>
+                            <property name="halign">end</property>
+                            <property name="valign">start</property>
+                            <property name="margin-top">12</property>
+                            <property name="margin-end">16</property>
+                            <style>
+                              <class name="title-4"/>
+                              <class name="osd"/>
+                            </style>
+                          </object>
+                        </child>
+                        <child type="overlay">
+                          <object class="GtkBox" id="focus_reticle">
+                            <property name="visible">False</property>
+                            <property name="can-target">False</property>
+                            <property name="halign">start</property>
+                            <property name="valign">start</property>
+                            <property name="width-request">64</property>
+                            <property name="height-request">64</property>
+                            <style>
+                              <class name="focus-reticle"/>
+                            </style>
+                          </object>
+                        </child>
+                        <child type="overlay">
+                          <object class="GtkBox" id="shutter_flash">
+                            <property name="can-target">False</property>
+                            <property name="opacity">0</property>
+                            <property name="hexpand">True</property>
+                            <property name="vexpand">True</property>
+                            <style>
+                              <class name="shutter-flash"/>
+                            </style>
+                          </object>
+                        </child>
+                          </object>
+                        </property>
                       </object>
                     </child>
                     <child>
