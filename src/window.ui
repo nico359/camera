@@ -399,10 +399,24 @@
                                           <object class="GtkStack" id="last_media_stack">
                                             <property name="width-request">48</property>
                                             <property name="height-request">48</property>
+                                            <property name="overflow">hidden</property>
+                                            <style>
+                                              <class name="last-media-thumb"/>
+                                            </style>
                                             <child>
                                               <object class="GtkPicture" id="last_photo_picture">
                                                 <property name="content-fit">cover</property>
                                                 <property name="can-shrink">True</property>
+                                                <property name="width-request">48</property>
+                                                <property name="height-request">48</property>
+                                              </object>
+                                            </child>
+                                            <child>
+                                              <object class="GtkPicture" id="last_video_picture">
+                                                <property name="content-fit">cover</property>
+                                                <property name="can-shrink">True</property>
+                                                <property name="width-request">48</property>
+                                                <property name="height-request">48</property>
                                               </object>
                                             </child>
                                             <child>
@@ -500,17 +514,9 @@
   <menu id="primary_menu">
     <section>
       <item>
-        <attribute name="label" translatable="yes">_Gallery</attribute>
-        <attribute name="action">win.gallery</attribute>
+        <attribute name="label" translatable="yes">_Keyboard Shortcuts</attribute>
+        <attribute name="action">win.shortcuts</attribute>
       </item>
-    </section>
-    <section>
-      <item>
-        <attribute name="label" translatable="yes">_Manual Controls</attribute>
-        <attribute name="action">win.manual-controls</attribute>
-      </item>
-    </section>
-    <section>
       <item>
         <attribute name="label" translatable="yes">_Settings</attribute>
         <attribute name="action">win.settings</attribute>

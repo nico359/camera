@@ -40,6 +40,10 @@
   color: #ffffff;
 }
 
+.last-media-thumb {
+  border-radius: 8px;
+}
+
 .shutter-flash {
   background-color: #000000;
 }

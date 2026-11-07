@@ -72,6 +72,29 @@ thread_local! {
     static POSTER_CACHE: RefCell<TextureCache> = RefCell::new(TextureCache::new(12));
 }
 
+/// Return a square, cropped 48 px thumbnail from the persistent video poster.
+pub(crate) fn cached_video_poster(path: &Path) -> Option<gdk::Texture> {
+    let cache_path = poster_cache_path(path)?;
+    crate::ui::square_texture(&cache_path, 48)
+}
+
+/// Keep a decoded poster in memory and on disk for the gallery and the
+/// last-media thumbnail.
+pub(crate) fn store_video_poster(path: &Path, texture: &gdk::Texture) {
+    POSTER_CACHE.with(|cache| {
+        cache
+            .borrow_mut()
+            .insert(path.to_path_buf(), texture.clone())
+    });
+
+    if let Some(cache_path) = poster_cache_path(path) {
+        if let Some(directory) = cache_path.parent() {
+            let _ = std::fs::create_dir_all(directory);
+        }
+        let _ = texture.save_to_png(&cache_path);
+    }
+}
+
 /// Persistent poster frame for a video, keyed on the file path and mtime.
 fn poster_cache_path(path: &Path) -> Option<PathBuf> {
     let modified = std::fs::metadata(path).ok()?.modified().ok()?;
@@ -394,18 +417,7 @@ impl VideoPage {
         };
         let texture = renderer.render_texture(&node, None);
 
-        POSTER_CACHE.with(|cache| {
-            cache
-                .borrow_mut()
-                .insert(self.path.clone(), texture.clone())
-        });
-
-        if let Some(cache_path) = poster_cache_path(&self.path) {
-            if let Some(directory) = cache_path.parent() {
-                let _ = std::fs::create_dir_all(directory);
-            }
-            let _ = texture.save_to_png(&cache_path);
-        }
+        store_video_poster(&self.path, &texture);
 
         *self.poster.borrow_mut() = Some(texture);
         self.button.set_visible(true);

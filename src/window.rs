@@ -49,6 +49,58 @@ fn draw_grid(cr: &gtk::cairo::Context, width: f64, height: f64) {
     }
 }
 
+/// Render one decoded video frame at up to `max_size` on its longest edge.
+fn snapshot_media(
+    stream: &gtk::MediaFile,
+    max_size: f64,
+    renderer: &gtk::gsk::Renderer,
+) -> Option<gtk::gdk::Texture> {
+    let width = stream.intrinsic_width() as f64;
+    let height = stream.intrinsic_height() as f64;
+    if width <= 0.0 || height <= 0.0 {
+        return None;
+    }
+
+    let scale = (max_size / width.max(height)).min(1.0);
+    let snapshot = gtk::Snapshot::new();
+    stream.snapshot(&snapshot, width * scale, height * scale);
+    let node = snapshot.to_node()?;
+    Some(renderer.render_texture(&node, None))
+}
+
+/// Render a square, centre-cropped video frame for the last-media thumbnail.
+fn snapshot_media_square(
+    stream: &gtk::MediaFile,
+    size: f64,
+    renderer: &gtk::gsk::Renderer,
+) -> Option<gtk::gdk::Texture> {
+    let width = stream.intrinsic_width() as f64;
+    let height = stream.intrinsic_height() as f64;
+    if width <= 0.0 || height <= 0.0 {
+        return None;
+    }
+
+    // Cover the square, then crop the overflow.
+    let scale = (size / width).max(size / height);
+    let draw_width = width * scale;
+    let draw_height = height * scale;
+    let snapshot = gtk::Snapshot::new();
+    snapshot.push_clip(&gtk::graphene::Rect::new(
+        0.0,
+        0.0,
+        size as f32,
+        size as f32,
+    ));
+    snapshot.translate(&gtk::graphene::Point::new(
+        ((size - draw_width) / 2.0) as f32,
+        ((size - draw_height) / 2.0) as f32,
+    ));
+    stream.snapshot(&snapshot, draw_width, draw_height);
+    snapshot.pop();
+    let node = snapshot.to_node()?;
+    Some(renderer.render_texture(&node, None))
+}
+
 fn draw_level_segments(cr: &gtk::cairo::Context, half: f64, gap: f64) {
     cr.move_to(-half, 0.0);
     cr.line_to(-gap, 0.0);
@@ -130,6 +182,9 @@ mod imp {
 
         #[template_child]
         pub last_photo_picture: TemplateChild<gtk::Picture>,
+
+        #[template_child]
+        pub last_video_picture: TemplateChild<gtk::Picture>,
 
         #[template_child]
         pub last_video_icon: TemplateChild<gtk::Image>,
@@ -224,6 +279,7 @@ mod imp {
             RefCell<Option<std::sync::mpsc::Receiver<crate::location::LocationFix>>>,
         pub(super) location_fix: RefCell<Option<crate::location::LocationFix>>,
         pub(super) manual_limits: RefCell<crate::camera::ManualControls>,
+        pub(super) last_video_media: RefCell<Option<gtk::MediaFile>>,
         pub(super) manual_active: Cell<bool>,
         pub(super) manual_syncing: Cell<bool>,
     }
@@ -522,14 +578,14 @@ mod imp {
             });
             window.add_action(&focus_center);
 
-            let gallery = gio::SimpleAction::new("gallery", None);
+            let shortcuts = gio::SimpleAction::new("shortcuts", None);
             let weak = window.downgrade();
-            gallery.connect_activate(move |_, _| {
+            shortcuts.connect_activate(move |_, _| {
                 if let Some(window) = weak.upgrade() {
-                    window.show_gallery();
+                    window.show_shortcuts();
                 }
             });
-            window.add_action(&gallery);
+            window.add_action(&shortcuts);
 
             let manual = gio::SimpleAction::new("manual-controls", None);
             let weak = window.downgrade();
@@ -571,6 +627,7 @@ mod imp {
                 application.set_accels_for_action("win.zoom-in", &["plus", "equal"]);
                 application.set_accels_for_action("win.zoom-out", &["minus"]);
                 application.set_accels_for_action("win.focus-center", &["f"]);
+                application.set_accels_for_action("win.shortcuts", &["<primary>question"]);
                 application.set_accels_for_action("win.settings", &["<primary>comma"]);
             }
 
@@ -792,6 +849,13 @@ impl CameraWindow {
     pub(crate) fn update_preview_aspect(&self) {
         let view = self.imp().camera_view.get();
         self.imp().preview_frame.set_ratio(view.preview_aspect());
+    }
+
+    fn show_shortcuts(&self) {
+        let builder = gtk::Builder::from_resource("/io/github/nico359/camera/shortcuts-dialog.ui");
+        if let Some(dialog) = builder.object::<adw::Dialog>("shortcuts_dialog") {
+            dialog.present(Some(self));
+        }
     }
 
     fn show_settings(&self) {
@@ -1401,25 +1465,86 @@ impl CameraWindow {
             .and_then(|extension| extension.to_str())
             .is_some_and(|extension| extension.eq_ignore_ascii_case("mp4"));
 
-        if is_video {
+        if let Some(media) = self.imp().last_video_media.borrow_mut().take() {
+            media.pause();
             self.imp()
-                .last_media_stack
-                .set_visible_child(&self.imp().last_video_icon.get());
+                .last_video_picture
+                .set_paintable(None::<&gtk::gdk::Paintable>);
+        }
+
+        if is_video {
+            if let Some(texture) = crate::ui::gallery::cached_video_poster(path) {
+                self.imp().last_video_picture.set_paintable(Some(&texture));
+                self.imp()
+                    .last_media_stack
+                    .set_visible_child(&self.imp().last_video_picture.get());
+            } else {
+                // Show the film icon until the first frame has been decoded.
+                self.imp()
+                    .last_media_stack
+                    .set_visible_child(&self.imp().last_video_icon.get());
+                self.start_video_thumbnail(path);
+            }
             self.imp().last_photo_button.set_visible(true);
             return;
         }
 
-        match gtk::gdk_pixbuf::Pixbuf::from_file_at_scale(path, 48, 48, true) {
-            Ok(pixbuf) => {
-                let texture = gtk::gdk::Texture::for_pixbuf(&pixbuf);
+        match crate::ui::square_texture(path, 48) {
+            Some(texture) => {
                 self.imp().last_photo_picture.set_paintable(Some(&texture));
                 self.imp()
                     .last_media_stack
                     .set_visible_child(&self.imp().last_photo_picture.get());
                 self.imp().last_photo_button.set_visible(true);
             }
-            Err(error) => eprintln!("thumbnail for {}: {error}", path.display()),
+            None => eprintln!("thumbnail for {} could not be loaded", path.display()),
         }
+    }
+
+    /// Decode the first frame of a video that has no cached poster yet, then
+    /// cache it for the gallery and show a small cropped thumbnail.
+    fn start_video_thumbnail(&self, path: &Path) {
+        let Some(surface) = self.native().and_then(|native| native.surface()) else {
+            return;
+        };
+
+        let media = gtk::MediaFile::for_filename(path);
+        media.set_loop(false);
+
+        let path = path.to_path_buf();
+        let weak = self.downgrade();
+        media.connect_invalidate_contents(move |stream| {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            let imp = window.imp();
+            // Taking the media also makes this run only for the current video.
+            let Some(media) = imp.last_video_media.borrow_mut().take() else {
+                return;
+            };
+            let Some(native) = window.native() else {
+                return;
+            };
+            let Some(renderer) = native.renderer() else {
+                return;
+            };
+
+            if let Some(texture) = snapshot_media_square(stream, 48.0, &renderer) {
+                imp.last_video_picture.set_paintable(Some(&texture));
+                imp.last_media_stack
+                    .set_visible_child(&imp.last_video_picture.get());
+            }
+            if let Some(poster) = snapshot_media(stream, 1280.0, &renderer) {
+                crate::ui::gallery::store_video_poster(&path, &poster);
+            }
+
+            media.pause();
+        });
+
+        // Keep the stream alive until the first frame arrives.
+        *self.imp().last_video_media.borrow_mut() = Some(media.clone());
+        media.realize(&surface);
+        media.pause();
     }
 
     fn load_latest_media(&self) {

@@ -23,17 +23,20 @@ Flatpak. Feature parity with FuriCam or at least close to it is planned. Might a
 - asynchronous capture feedback: the UI reports when the JPEG is actually
   written, not when the request is submitted
 - a read-only media viewer inside the main window: the last-media thumbnail
-  (by default) and the hamburger Gallery item push a swipeable carousel of
-  photos and videos from the Camera folders. Photos fill the window and are
+  (by default) pushes a swipeable carousel of photos and videos from the Camera
+  folders. The thumbnail itself is a centre-cropped rounded square, and it
+  shows a real first frame for the latest video. Photos fill the window and are
   decoded on worker threads with neighbouring pages prefetched; videos show a
   cached first-frame poster and play in-app with GStreamer, and only the
   visible page keeps a decoder loaded. Posters are cached under
-  `XDG_CACHE_HOME/camera/vidthumbs` and generated in the background. The header has Back and “Open
-  Externally” buttons. A Settings switch makes the last-media thumbnail open
-  the latest item externally instead; the “Ask Which App to Open Media” switch
-  forces the portal app chooser for external opens. On a keyboard, the arrow
-  keys change pages, Space/Return play or pause a video, and Escape closes the
-  viewer
+  `XDG_CACHE_HOME/camera/vidthumbs` and generated in the background. The header
+  has Back and “Open Externally” buttons. A Settings switch makes the
+  last-media thumbnail open the latest item externally instead; the “Ask Which
+  App to Open Media” switch forces the portal app chooser for external opens.
+  On a keyboard, the arrow keys change pages, Space/Return play or pause a
+  video, and Escape closes the viewer
+- a Keyboard Shortcuts sheet in the hamburger menu, listing the camera, gallery
+  and application bindings
 - optional GPS tagging for photos: uses the system location service, writes a
   location only when the fix is fresh and (by default) accurate to 10 m, and
   never reuses a stale fix. A header indicator shows the current fix; videos

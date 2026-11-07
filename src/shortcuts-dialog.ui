@@ -1,22 +1,191 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <interface>
-  <object class="AdwShortcutsDialog" id="shortcuts_dialog">
-    <child>
-      <object class="AdwShortcutsSection">
-        <property name="title" translatable="yes">Shortcuts</property>
-        <child>
-          <object class="AdwShortcutsItem">
-            <property name="title" translatable="yes" context="shortcut window">Show Shortcuts</property>
-            <property name="action-name">app.shortcuts</property>
+  <object class="AdwDialog" id="shortcuts_dialog">
+    <property name="title" translatable="yes">Keyboard Shortcuts</property>
+    <property name="content-width">360</property>
+    <property name="content-height">640</property>
+    <property name="child">
+      <object class="AdwToolbarView">
+        <child type="top">
+          <object class="AdwHeaderBar">
+            <property name="show-back-button">False</property>
+            <property name="title-widget">
+              <object class="AdwWindowTitle">
+                <property name="title" translatable="yes">Keyboard Shortcuts</property>
+              </object>
+            </property>
           </object>
         </child>
-        <child>
-          <object class="AdwShortcutsItem">
-            <property name="title" translatable="yes" context="shortcut window">Quit</property>
-            <property name="action-name">app.quit</property>
+        <property name="content">
+          <object class="AdwPreferencesPage">
+            <child>
+              <object class="AdwPreferencesGroup">
+                <property name="title" translatable="yes">Camera</property>
+                <child>
+                  <object class="AdwActionRow">
+                    <property name="title" translatable="yes">Take Photo / Record Video</property>
+                    <child type="suffix">
+                      <object class="GtkShortcutLabel">
+                        <property name="accelerator">space</property>
+                      </object>
+                    </child>
+                  </object>
+                </child>
+                <child>
+                  <object class="AdwActionRow">
+                    <property name="title" translatable="yes">Switch Camera</property>
+                    <child type="suffix">
+                      <object class="GtkShortcutLabel">
+                        <property name="accelerator">s</property>
+                      </object>
+                    </child>
+                  </object>
+                </child>
+                <child>
+                  <object class="AdwActionRow">
+                    <property name="title" translatable="yes">Photo / Video Mode</property>
+                    <child type="suffix">
+                      <object class="GtkShortcutLabel">
+                        <property name="accelerator">v</property>
+                      </object>
+                    </child>
+                  </object>
+                </child>
+                <child>
+                  <object class="AdwActionRow">
+                    <property name="title" translatable="yes">Reset Focus</property>
+                    <child type="suffix">
+                      <object class="GtkShortcutLabel">
+                        <property name="accelerator">f</property>
+                      </object>
+                    </child>
+                  </object>
+                </child>
+                <child>
+                  <object class="AdwActionRow">
+                    <property name="title" translatable="yes">Zoom In</property>
+                    <child type="suffix">
+                      <object class="GtkShortcutLabel">
+                        <property name="accelerator">plus</property>
+                      </object>
+                    </child>
+                  </object>
+                </child>
+                <child>
+                  <object class="AdwActionRow">
+                    <property name="title" translatable="yes">Zoom Out</property>
+                    <child type="suffix">
+                      <object class="GtkShortcutLabel">
+                        <property name="accelerator">minus</property>
+                      </object>
+                    </child>
+                  </object>
+                </child>
+              </object>
+            </child>
+            <child>
+              <object class="AdwPreferencesGroup">
+                <property name="title" translatable="yes">Gallery</property>
+                <child>
+                  <object class="AdwActionRow">
+                    <property name="title" translatable="yes">Previous Image</property>
+                    <child type="suffix">
+                      <object class="GtkShortcutLabel">
+                        <property name="accelerator">Left</property>
+                      </object>
+                    </child>
+                  </object>
+                </child>
+                <child>
+                  <object class="AdwActionRow">
+                    <property name="title" translatable="yes">Next Image</property>
+                    <child type="suffix">
+                      <object class="GtkShortcutLabel">
+                        <property name="accelerator">Right</property>
+                      </object>
+                    </child>
+                  </object>
+                </child>
+                <child>
+                  <object class="AdwActionRow">
+                    <property name="title" translatable="yes">Play / Pause Video</property>
+                    <child type="suffix">
+                      <object class="GtkShortcutLabel">
+                        <property name="accelerator">space</property>
+                      </object>
+                    </child>
+                  </object>
+                </child>
+                <child>
+                  <object class="AdwActionRow">
+                    <property name="title" translatable="yes">Zoom In</property>
+                    <child type="suffix">
+                      <object class="GtkShortcutLabel">
+                        <property name="accelerator">plus</property>
+                      </object>
+                    </child>
+                  </object>
+                </child>
+                <child>
+                  <object class="AdwActionRow">
+                    <property name="title" translatable="yes">Zoom Out</property>
+                    <child type="suffix">
+                      <object class="GtkShortcutLabel">
+                        <property name="accelerator">minus</property>
+                      </object>
+                    </child>
+                  </object>
+                </child>
+                <child>
+                  <object class="AdwActionRow">
+                    <property name="title" translatable="yes">Close Gallery</property>
+                    <child type="suffix">
+                      <object class="GtkShortcutLabel">
+                        <property name="accelerator">Escape</property>
+                      </object>
+                    </child>
+                  </object>
+                </child>
+              </object>
+            </child>
+            <child>
+              <object class="AdwPreferencesGroup">
+                <property name="title" translatable="yes">Application</property>
+                <child>
+                  <object class="AdwActionRow">
+                    <property name="title" translatable="yes">Keyboard Shortcuts</property>
+                    <child type="suffix">
+                      <object class="GtkShortcutLabel">
+                        <property name="accelerator">&lt;Primary&gt;question</property>
+                      </object>
+                    </child>
+                  </object>
+                </child>
+                <child>
+                  <object class="AdwActionRow">
+                    <property name="title" translatable="yes">Settings</property>
+                    <child type="suffix">
+                      <object class="GtkShortcutLabel">
+                        <property name="accelerator">&lt;Primary&gt;comma</property>
+                      </object>
+                    </child>
+                  </object>
+                </child>
+                <child>
+                  <object class="AdwActionRow">
+                    <property name="title" translatable="yes">Quit</property>
+                    <child type="suffix">
+                      <object class="GtkShortcutLabel">
+                        <property name="accelerator">&lt;Primary&gt;q</property>
+                      </object>
+                    </child>
+                  </object>
+                </child>
+              </object>
+            </child>
           </object>
-        </child>
+        </property>
       </object>
-    </child>
+    </property>
   </object>
 </interface>
