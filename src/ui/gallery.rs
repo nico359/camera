@@ -853,15 +853,48 @@ fn start_poster_prewarm(
     tick
 }
 
+/// The navigation view's swipe tracker is a capture-phase drag gesture. It
+/// still claims horizontal drags when the visible page has `can-pop` disabled,
+/// which cancels panning in the photo viewer. The gallery is the only page in
+/// this navigation view, so disable the tracker's drag/scroll controllers and
+/// use the explicit Back button instead.
+fn disable_navigation_swipe(navigation: &adw::NavigationView) {
+    let controllers = navigation.observe_controllers();
+    for index in 0..controllers.n_items() {
+        let Some(controller) = controllers.item(index) else {
+            continue;
+        };
+        let Ok(controller) = controller.downcast::<gtk::EventController>() else {
+            continue;
+        };
+        if controller.is::<gtk::GestureDrag>() || controller.is::<gtk::EventControllerScroll>() {
+            controller.set_propagation_phase(gtk::PropagationPhase::None);
+        }
+    }
+}
+
 pub fn present(parent: &CameraWindow) {
     let navigation = parent.navigation_view();
     if navigation.find_page("gallery").is_some() {
         return;
     }
 
+    disable_navigation_swipe(&navigation);
+
     let items = Rc::new(media::scan_media());
 
     let header = adw::HeaderBar::new();
+
+    let back = gtk::Button::from_icon_name("go-previous-symbolic");
+    back.add_css_class("flat");
+    back.set_tooltip_text(Some(&gettext("Back")));
+    let nav_weak = navigation.downgrade();
+    back.connect_clicked(move |_| {
+        if let Some(navigation) = nav_weak.upgrade() {
+            navigation.pop();
+        }
+    });
+    header.pack_start(&back);
 
     let title = adw::WindowTitle::new(&gettext("Gallery"), "");
     header.set_title_widget(Some(&title));
