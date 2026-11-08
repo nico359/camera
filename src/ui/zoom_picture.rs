@@ -29,6 +29,11 @@ mod imp {
         pub pinch_start: Cell<Option<f64>>,
         pub drag_start: Cell<(f64, f64)>,
         pub anim: RefCell<Option<glib::SourceId>>,
+        pub tap_start: Cell<Option<(u32, f64, f64)>>,
+        pub tap_moved: Cell<bool>,
+        pub last_tap: Cell<Option<(u32, f64, f64)>>,
+        pub touch_count: Cell<u32>,
+        pub touch_sequence: RefCell<Option<gdk::EventSequence>>,
     }
 
     impl Default for ZoomPicture {
@@ -41,6 +46,11 @@ mod imp {
                 pinch_start: Cell::new(None),
                 drag_start: Cell::new((0.0, 0.0)),
                 anim: RefCell::new(None),
+                tap_start: Cell::new(None),
+                tap_moved: Cell::new(false),
+                last_tap: Cell::new(None),
+                touch_count: Cell::new(0),
+                touch_sequence: RefCell::new(None),
             }
         }
     }
@@ -130,33 +140,20 @@ mod imp {
             });
             obj.add_controller(drag);
 
-            let click = gtk::GestureClick::new();
-            click.set_button(gdk::BUTTON_PRIMARY);
+            // Double-taps are detected from raw press/release events instead of
+            // GtkGestureClick. When a photo is zoomed, the pan GestureDrag
+            // claims the sequence and cancels the click gesture's multi-press
+            // tracking; the legacy controller still sees every event.
+            let legacy = gtk::EventControllerLegacy::new();
+            legacy.set_propagation_phase(gtk::PropagationPhase::Capture);
             let weak = obj.downgrade();
-            click.connect_pressed(move |_, n_press, x, y| {
-                if n_press != 2 {
-                    return;
+            legacy.connect_event(move |_, event| {
+                if let Some(widget) = weak.upgrade() {
+                    widget.handle_event(event);
                 }
-                let Some(widget) = weak.upgrade() else {
-                    return;
-                };
-                if widget.scale() > ZOOMED_EPSILON {
-                    widget.animate_to(1.0, (0.0, 0.0));
-                } else {
-                    let (cx, cy) = widget.content_center();
-                    let pan = widget.pan();
-                    let scale = widget.scale();
-                    let base = (cx + (x - cx - pan.0) / scale, cy + (y - cy - pan.1) / scale);
-                    let target = DOUBLE_TAP_SCALE;
-                    let pan = (
-                        x - cx - (base.0 - cx) * target,
-                        y - cy - (base.1 - cy) * target,
-                    );
-                    let pan = widget.clamp_pan(target, pan);
-                    widget.animate_to(target, pan);
-                }
+                glib::Propagation::Proceed
             });
-            obj.add_controller(click);
+            obj.add_controller(legacy);
         }
     }
 
@@ -229,6 +226,201 @@ impl ZoomPicture {
 
     fn pan(&self) -> (f64, f64) {
         (self.imp().pan_x.get(), self.imp().pan_y.get())
+    }
+
+    fn handle_event(&self, event: &gdk::Event) {
+        match event.event_type() {
+            gdk::EventType::ButtonPress => {
+                if self.is_touchscreen(event) {
+                    return;
+                }
+                let Some(button) = event.downcast_ref::<gdk::ButtonEvent>() else {
+                    return;
+                };
+                if button.button() != gdk::BUTTON_PRIMARY {
+                    return;
+                }
+                let Some(position) = self.event_position(event) else {
+                    return;
+                };
+                self.imp()
+                    .tap_start
+                    .set(Some((event.time(), position.0, position.1)));
+                self.imp().tap_moved.set(false);
+            }
+            gdk::EventType::MotionNotify => {
+                let Some((_, start_x, start_y)) = self.imp().tap_start.get() else {
+                    return;
+                };
+                let Some(position) = self.event_position(event) else {
+                    return;
+                };
+                if squared_distance(position, (start_x, start_y))
+                    > self.double_click_distance().powi(2)
+                {
+                    self.imp().tap_moved.set(true);
+                    self.imp().last_tap.set(None);
+                }
+            }
+            gdk::EventType::ButtonRelease => {
+                if self.is_touchscreen(event) {
+                    return;
+                }
+                let Some(button) = event.downcast_ref::<gdk::ButtonEvent>() else {
+                    return;
+                };
+                if button.button() != gdk::BUTTON_PRIMARY {
+                    return;
+                }
+                let Some((time, start_x, start_y)) = self.imp().tap_start.take() else {
+                    return;
+                };
+                if self.imp().tap_moved.get() {
+                    return;
+                }
+                let Some(position) = self.event_position(event) else {
+                    return;
+                };
+                if squared_distance(position, (start_x, start_y))
+                    <= self.double_click_distance().powi(2)
+                {
+                    self.register_tap(time, position.0, position.1);
+                }
+            }
+            gdk::EventType::TouchBegin => {
+                let count = self.imp().touch_count.get() + 1;
+                self.imp().touch_count.set(count);
+                if count == 1 {
+                    let Some(position) = self.event_position(event) else {
+                        return;
+                    };
+                    *self.imp().touch_sequence.borrow_mut() = Some(event.event_sequence());
+                    self.imp()
+                        .tap_start
+                        .set(Some((event.time(), position.0, position.1)));
+                    self.imp().tap_moved.set(false);
+                } else {
+                    // A second finger means a pinch, not a tap.
+                    self.imp().tap_moved.set(true);
+                    self.imp().last_tap.set(None);
+                }
+            }
+            gdk::EventType::TouchUpdate => {
+                let sequence = event.event_sequence();
+                if self
+                    .imp()
+                    .touch_sequence
+                    .borrow()
+                    .as_ref()
+                    .is_none_or(|stored| stored != &sequence)
+                {
+                    return;
+                }
+                let Some((_, start_x, start_y)) = self.imp().tap_start.get() else {
+                    return;
+                };
+                let Some(position) = self.event_position(event) else {
+                    return;
+                };
+                if squared_distance(position, (start_x, start_y))
+                    > self.double_click_distance().powi(2)
+                {
+                    self.imp().tap_moved.set(true);
+                    self.imp().last_tap.set(None);
+                }
+            }
+            gdk::EventType::TouchEnd | gdk::EventType::TouchCancel => {
+                let count = self.imp().touch_count.get().saturating_sub(1);
+                self.imp().touch_count.set(count);
+                let sequence = event.event_sequence();
+                let primary = self
+                    .imp()
+                    .touch_sequence
+                    .borrow()
+                    .as_ref()
+                    .is_some_and(|stored| stored == &sequence);
+                if primary {
+                    let start = self.imp().tap_start.take();
+                    let moved = self.imp().tap_moved.get();
+                    if event.event_type() == gdk::EventType::TouchEnd && !moved && count == 0 {
+                        if let (Some((time, start_x, start_y)), Some(position)) =
+                            (start, self.event_position(event))
+                        {
+                            if squared_distance(position, (start_x, start_y))
+                                <= self.double_click_distance().powi(2)
+                            {
+                                self.register_tap(time, position.0, position.1);
+                            }
+                        }
+                    }
+                    self.imp().touch_sequence.borrow_mut().take();
+                }
+                if count == 0 {
+                    self.imp().tap_moved.set(false);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn register_tap(&self, time: u32, x: f64, y: f64) {
+        let double_time = self.double_click_time();
+        let double_distance = self.double_click_distance();
+        if let Some((last_time, last_x, last_y)) = self.imp().last_tap.get() {
+            if time.wrapping_sub(last_time) <= double_time
+                && squared_distance((x, y), (last_x, last_y)) <= double_distance.powi(2)
+            {
+                self.imp().last_tap.set(None);
+                self.toggle_double_tap(x, y);
+                return;
+            }
+        }
+        self.imp().last_tap.set(Some((time, x, y)));
+    }
+
+    fn toggle_double_tap(&self, x: f64, y: f64) {
+        if self.scale() > ZOOMED_EPSILON {
+            self.animate_to(1.0, (0.0, 0.0));
+            return;
+        }
+
+        let (cx, cy) = self.content_center();
+        let pan = self.pan();
+        let scale = self.scale();
+        let base = (cx + (x - cx - pan.0) / scale, cy + (y - cy - pan.1) / scale);
+        let target = DOUBLE_TAP_SCALE;
+        let pan = (
+            x - cx - (base.0 - cx) * target,
+            y - cy - (base.1 - cy) * target,
+        );
+        let pan = self.clamp_pan(target, pan);
+        self.animate_to(target, pan);
+    }
+
+    fn double_click_time(&self) -> u32 {
+        gtk::Settings::default()
+            .map(|settings| settings.gtk_double_click_time().clamp(100, 1000) as u32)
+            .unwrap_or(400)
+    }
+
+    fn double_click_distance(&self) -> f64 {
+        gtk::Settings::default()
+            .map(|settings| settings.gtk_double_click_distance().clamp(8, 64) as f64)
+            .unwrap_or(24.0)
+    }
+
+    fn is_touchscreen(&self, event: &gdk::Event) -> bool {
+        event
+            .device()
+            .map(|device| device.source() == gdk::InputSource::Touchscreen)
+            .unwrap_or(false)
+    }
+
+    fn event_position(&self, event: &gdk::Event) -> Option<(f64, f64)> {
+        let (x, y) = event.position()?;
+        let root = self.root()?;
+        let point = root.compute_point(self, &graphene::Point::new(x as f32, y as f32))?;
+        Some((point.x() as f64, point.y() as f64))
     }
 
     fn content_center(&self) -> (f64, f64) {
@@ -375,4 +567,10 @@ impl ZoomPicture {
             self.zoom_to(target, None, true);
         }
     }
+}
+
+fn squared_distance(a: (f64, f64), b: (f64, f64)) -> f64 {
+    let dx = a.0 - b.0;
+    let dy = a.1 - b.1;
+    dx * dx + dy * dy
 }

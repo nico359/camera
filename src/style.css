@@ -77,3 +77,25 @@
 .gallery-video {
   background: #000000;
 }
+
+.gallery-pager {
+  background-color: rgba(0, 0, 0, 0.62);
+  border-radius: 999px;
+  padding: 2px 10px;
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.gallery-controls {
+  background-color: rgba(0, 0, 0, 0.62);
+  border-radius: 14px;
+  padding: 4px 8px;
+}
+
+.gallery-controls label {
+  color: #ffffff;
+}
+
+.gallery-seek {
+  min-height: 28px;
+}

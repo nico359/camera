@@ -277,12 +277,19 @@ struct VideoPage {
     root: gtk::Overlay,
     picture: gtk::Picture,
     button: gtk::Button,
+    controls: gtk::Box,
+    control_button: gtk::Button,
+    seek: gtk::Scale,
+    time_label: gtk::Label,
     spinner: gtk::Spinner,
     path: PathBuf,
     media: RefCell<Option<gtk::MediaFile>>,
     poster: RefCell<Option<gdk::Texture>>,
     realized: Cell<bool>,
     showing_stream: Cell<bool>,
+    scrubbing: Cell<bool>,
+    updating: Cell<bool>,
+    tick: RefCell<Option<gtk::glib::SourceId>>,
 }
 
 impl VideoPage {
@@ -317,6 +324,42 @@ impl VideoPage {
         button.set_visible(false);
         root.add_overlay(&button);
 
+        let controls = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+        controls.add_css_class("gallery-controls");
+        controls.set_halign(gtk::Align::Fill);
+        controls.set_valign(gtk::Align::End);
+        controls.set_margin_start(12);
+        controls.set_margin_end(12);
+        controls.set_margin_bottom(12);
+        controls.set_visible(false);
+
+        let control_button = gtk::Button::from_icon_name("media-playback-start-symbolic");
+        control_button.add_css_class("flat");
+        control_button.add_css_class("circular");
+        control_button.set_tooltip_text(Some(&gettext("Play")));
+        control_button.set_valign(gtk::Align::Center);
+        control_button.set_size_request(40, 40);
+
+        let seek = gtk::Scale::with_range(gtk::Orientation::Horizontal, 0.0, 1.0, 1.0);
+        seek.set_draw_value(false);
+        seek.set_hexpand(true);
+        seek.set_valign(gtk::Align::Center);
+        seek.set_round_digits(0);
+        seek.set_sensitive(false);
+        seek.add_css_class("gallery-seek");
+
+        let time_label = gtk::Label::new(Some("0:00 / 0:00"));
+        time_label.add_css_class("caption");
+        time_label.add_css_class("numeric");
+        time_label.set_xalign(1.0);
+        time_label.set_width_chars(11);
+        time_label.set_valign(gtk::Align::Center);
+
+        controls.append(&control_button);
+        controls.append(&seek);
+        controls.append(&time_label);
+        root.add_overlay(&controls);
+
         let poster = POSTER_CACHE
             .with(|cache| cache.borrow().get(path))
             .or_else(|| {
@@ -331,12 +374,19 @@ impl VideoPage {
             root,
             picture,
             button,
+            controls,
+            control_button,
+            seek,
+            time_label,
             spinner,
             path: path.to_path_buf(),
             media: RefCell::new(None),
             poster: RefCell::new(poster),
             realized: Cell::new(false),
             showing_stream: Cell::new(false),
+            scrubbing: Cell::new(false),
+            updating: Cell::new(false),
+            tick: RefCell::new(None),
         });
 
         let weak = Rc::downgrade(&page);
@@ -345,6 +395,41 @@ impl VideoPage {
                 page.toggle();
             }
         });
+
+        let weak = Rc::downgrade(&page);
+        page.control_button.connect_clicked(move |_| {
+            if let Some(page) = weak.upgrade() {
+                page.toggle();
+            }
+        });
+
+        let weak = Rc::downgrade(&page);
+        page.seek.connect_value_changed(move |scale| {
+            let Some(page) = weak.upgrade() else {
+                return;
+            };
+            if page.updating.get() || page.scrubbing.get() {
+                return;
+            }
+            page.seek_to(scale.value());
+        });
+
+        let drag = gtk::GestureDrag::new();
+        drag.set_propagation_phase(gtk::PropagationPhase::Capture);
+        let weak = Rc::downgrade(&page);
+        drag.connect_drag_begin(move |_, _, _| {
+            if let Some(page) = weak.upgrade() {
+                page.scrubbing.set(true);
+            }
+        });
+        let weak = Rc::downgrade(&page);
+        drag.connect_drag_end(move |_, _, _| {
+            if let Some(page) = weak.upgrade() {
+                page.scrubbing.set(false);
+                page.seek_to(page.seek.value());
+            }
+        });
+        page.seek.add_controller(drag);
 
         // A GtkMediaFile only produces video frames once it is realized with
         // the widget's GdkSurface; GtkVideo does this internally, a plain
@@ -436,6 +521,9 @@ impl VideoPage {
         self.button.set_visible(true);
         self.update_icon(false);
         self.spinner.set_visible(false);
+        self.controls.set_visible(true);
+        self.start_ticking();
+        self.update_controls();
 
         let stream = gtk::MediaFile::for_filename(&self.path);
         stream.set_loop(false);
@@ -450,6 +538,7 @@ impl VideoPage {
                 page.spinner.set_visible(false);
                 page.button.set_visible(stream.error().is_none());
                 page.update_icon(stream.is_playing());
+                page.update_controls();
             }
         });
 
@@ -461,6 +550,7 @@ impl VideoPage {
                     page.spinner.set_visible(false);
                 }
                 page.update_icon(stream.is_playing());
+                page.update_controls();
             }
         });
 
@@ -471,6 +561,8 @@ impl VideoPage {
                     page.spinner.stop();
                     page.spinner.set_visible(false);
                     page.button.set_visible(false);
+                    page.controls.set_visible(false);
+                    page.stop_ticking();
                 }
             }
         });
@@ -523,6 +615,70 @@ impl VideoPage {
         self.spinner.stop();
         self.spinner.set_visible(false);
         self.button.set_visible(false);
+        self.stop_ticking();
+        self.controls.set_visible(false);
+        self.scrubbing.set(false);
+        self.updating.set(false);
+    }
+
+    fn start_ticking(self: &Rc<Self>) {
+        if self.tick.borrow().is_some() {
+            return;
+        }
+
+        let weak = Rc::downgrade(self);
+        let id = gtk::glib::timeout_add_local(Duration::from_millis(250), move || {
+            let Some(page) = weak.upgrade() else {
+                return gtk::glib::ControlFlow::Break;
+            };
+            if page.media.borrow().is_none() {
+                page.tick.borrow_mut().take();
+                return gtk::glib::ControlFlow::Break;
+            }
+            page.update_controls();
+            gtk::glib::ControlFlow::Continue
+        });
+        *self.tick.borrow_mut() = Some(id);
+    }
+
+    fn stop_ticking(&self) {
+        if let Some(id) = self.tick.borrow_mut().take() {
+            id.remove();
+        }
+    }
+
+    fn seek_to(&self, seconds: f64) {
+        if let Some(stream) = self.media.borrow().as_ref() {
+            stream.seek((seconds * 1_000_000.0).round() as i64);
+        }
+    }
+
+    fn update_controls(&self) {
+        let stream = self.media.borrow().as_ref().cloned();
+        let Some(stream) = stream else {
+            return;
+        };
+
+        let duration = stream.duration();
+        let timestamp = stream.timestamp().max(0);
+        let seekable = stream.is_seekable() && duration > 0;
+        self.seek.set_sensitive(seekable);
+
+        if seekable && !self.scrubbing.get() {
+            self.updating.set(true);
+            self.seek.set_range(0.0, duration as f64 / 1_000_000.0);
+            self.seek.set_value(timestamp as f64 / 1_000_000.0);
+            self.updating.set(false);
+        }
+
+        let duration_label = if duration > 0 {
+            format_time(duration)
+        } else {
+            "--:--".to_string()
+        };
+        self.time_label
+            .set_text(&format!("{} / {}", format_time(timestamp), duration_label));
+        self.update_icon(stream.is_playing());
     }
 
     fn toggle(self: &Rc<Self>) {
@@ -543,13 +699,28 @@ impl VideoPage {
     }
 
     fn update_icon(&self, playing: bool) {
-        if playing {
-            self.button.set_icon_name("media-playback-pause-symbolic");
-            self.button.set_tooltip_text(Some(&gettext("Pause")));
+        let (icon, tooltip) = if playing {
+            ("media-playback-pause-symbolic", gettext("Pause"))
         } else {
-            self.button.set_icon_name("media-playback-start-symbolic");
-            self.button.set_tooltip_text(Some(&gettext("Play")));
-        }
+            ("media-playback-start-symbolic", gettext("Play"))
+        };
+        self.button.set_icon_name(icon);
+        self.button.set_tooltip_text(Some(&tooltip));
+        self.button.set_visible(!playing);
+        self.control_button.set_icon_name(icon);
+        self.control_button.set_tooltip_text(Some(&tooltip));
+    }
+}
+
+fn format_time(microseconds: i64) -> String {
+    let total = (microseconds.max(0) / 1_000_000) as u64;
+    let hours = total / 3600;
+    let minutes = (total % 3600) / 60;
+    let seconds = total % 60;
+    if hours > 0 {
+        format!("{hours}:{minutes:02}:{seconds:02}")
+    } else {
+        format!("{minutes}:{seconds:02}")
     }
 }
 
@@ -751,15 +922,20 @@ pub fn present(parent: &CameraWindow) {
 
     let entries = Rc::new(entries);
 
-    let dots = adw::CarouselIndicatorDots::new();
-    dots.set_carousel(Some(&carousel));
-    dots.set_margin_top(8);
-    dots.set_margin_bottom(12);
+    let pager = gtk::Label::new(None);
+    pager.add_css_class("gallery-pager");
+    pager.set_halign(gtk::Align::Center);
+    pager.set_margin_top(6);
+    pager.set_margin_bottom(10);
+    pager.set_visible(items.len() > 1);
+    if items.len() > 1 {
+        pager.set_label(&format!("1 / {}", items.len()));
+    }
 
     let content = gtk::Box::new(gtk::Orientation::Vertical, 0);
     content.add_css_class("gallery-viewer");
     content.append(&carousel);
-    content.append(&dots);
+    content.append(&pager);
 
     let toast = adw::ToastOverlay::new();
     toast.set_child(Some(&content));
@@ -770,6 +946,9 @@ pub fn present(parent: &CameraWindow) {
 
     let page = adw::NavigationPage::new(&toolbar, &gettext("Gallery"));
     page.set_tag(Some("gallery"));
+    // Paging is handled by the carousel; the navigation swipe-back would
+    // compete with panning a zoomed photo, so use the Back button instead.
+    page.set_can_pop(false);
 
     let current = Rc::new(RefCell::new(None));
 
@@ -791,8 +970,15 @@ pub fn present(parent: &CameraWindow) {
     let entries_cb = Rc::clone(&entries);
     let title_cb = title.clone();
     let current_cb = Rc::clone(&current);
+    let pager_cb = pager.clone();
+    let carousel_focus = carousel.clone();
+    let total = items.len();
     carousel.connect_page_changed(move |_, index| {
         let index = index as usize;
+        carousel_focus.grab_focus();
+        if total > 1 {
+            pager_cb.set_label(&format!("{} / {}", index + 1, total));
+        }
         if let Some(item) = items_cb.get(index) {
             title_cb.set_subtitle(&file_name(&item.path));
             *current_cb.borrow_mut() = Some(item.path.clone());
