@@ -4,10 +4,10 @@ A GTK4/libadwaita camera application for FuriOS and other Halium-based Linux
 phones (maybe, the only other phone I can test is the Pixel 3a running Droidian and it doesn't work there).
 
 Camera drives the [FuriCam](https://github.com/nico359/furicam) Camera2 engine
-from a native GTK4 frontend. The 0.3.0 milestone proves the stack end to end:
-a real Camera2 viewfinder, full-resolution stills, hardware-encoded video,
-settings, a rotating level, an in-app media gallery and GPS tagging inside a
-Flatpak. Feature parity with FuriCam or at least close to it is planned. Might abandon FuriCam for this at some point because furios-camera will keep developing as well but let's see.
+from a native GTK4 frontend. The 0.4.0 milestone covers the camera and media
+workflow: a real Camera2 viewfinder, full-resolution stills, hardware-encoded
+video, manual exposure, settings, a rotating level, an in-app media gallery
+with a video player, and GPS tagging inside a Flatpak. Feature parity with FuriCam or at least close to it is planned. Might abandon FuriCam for this at some point because furios-camera will keep developing as well but let's see.
 
 <p>
   <img src="data/screenshot-photo.png" width="240" alt="Photo mode">
@@ -30,7 +30,10 @@ Flatpak. Feature parity with FuriCam or at least close to it is planned. Might a
   cached first-frame poster and play in-app with GStreamer, and only the
   visible page keeps a decoder loaded. Posters are cached under
   `XDG_CACHE_HOME/camera/vidthumbs` and generated in the background. The header
-  has Back and “Open Externally” buttons. A Settings switch makes the
+  has Back and “Open Externally” buttons. A compact “N / total” pager replaces
+  the old unbounded dot row, and video pages have play/pause, a scrubbing
+  slider and elapsed/total time. Double-tap toggles 2.5× zoom around the tapped
+  point and remains reliable when already zoomed. A Settings switch makes the
   last-media thumbnail open the latest item externally instead; the “Ask Which
   App to Open Media” switch forces the portal app chooser for external opens.
   On a keyboard, the arrow keys change pages, Space/Return play or pause a
@@ -107,8 +110,8 @@ Known limitations:
   phone often gets no fix; those photos are saved without a location rather
   than with a wrong one.
 - Manual exposure is reset to auto on camera or mode changes. Manual focus is
-  exposed by the engine but not in the UI yet; it is reported unreliable on
-  this phone.
+  exposed by the engine but not in the UI: the phone's HAL ignores focus
+  requests and leaves the lens fixed at its closest position.
 - The gallery is read-only for now: no delete/share, and video playback depends
   on the runtime's GStreamer H.264/AAC decoders (present on FuriOS).
 - The preview is portrait-locked by design; saved photos and videos follow the
