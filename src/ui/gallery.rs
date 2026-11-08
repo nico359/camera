@@ -908,7 +908,9 @@ pub fn present(parent: &CameraWindow) {
     carousel.set_hexpand(true);
     carousel.set_vexpand(true);
     carousel.set_allow_mouse_drag(true);
-    carousel.set_allow_long_swipes(true);
+    // One page per swipe. Long swipes skipped several photos at once and made
+    // the gallery feel unpredictable compared with FuriCam.
+    carousel.set_allow_long_swipes(false);
     carousel.set_interactive(true);
     carousel.set_focusable(true);
 
