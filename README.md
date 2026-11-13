@@ -4,10 +4,11 @@ A GTK4/libadwaita camera application for FuriOS and other Halium-based Linux
 phones (maybe, the only other phone I can test is the Pixel 3a running Droidian and it doesn't work there).
 
 Camera drives the [FuriCam](https://github.com/nico359/furicam) Camera2 engine
-from a native GTK4 frontend. The 0.4.0 milestone covers the camera and media
+from a native GTK4 frontend. The 0.5.0 milestone covers the camera and media
 workflow: a real Camera2 viewfinder, full-resolution stills, hardware-encoded
 video, manual exposure, settings, a rotating level, an in-app media gallery
-with a video player, and GPS tagging inside a Flatpak. Feature parity with FuriCam or at least close to it is planned. Might abandon FuriCam for this at some point because furios-camera will keep developing as well but let's see.
+with a video player, swipe gestures and deletion, and GPS tagging inside a
+Flatpak. Feature parity with FuriCam or at least close to it is planned. Might abandon FuriCam for this at some point because furios-camera will keep developing as well but let's see.
 
 <p>
   <img src="data/screenshot-photo.png" width="240" alt="Photo mode">
@@ -22,7 +23,7 @@ with a video player, and GPS tagging inside a Flatpak. Feature parity with FuriC
   JPEG stream; on the FuriPhone this is 5152×3864)
 - asynchronous capture feedback: the UI reports when the JPEG is actually
   written, not when the request is submitted
-- a read-only media viewer inside the main window: the last-media thumbnail
+- a media viewer inside the main window: the last-media thumbnail
   (by default) pushes a swipeable carousel of photos and videos from the Camera
   folders. The thumbnail itself is a centre-cropped rounded square, and it
   shows a real first frame for the latest video. Photos fill the window and are
@@ -33,11 +34,16 @@ with a video player, and GPS tagging inside a Flatpak. Feature parity with FuriC
   has Back and “Open Externally” buttons. A compact “N / total” pager replaces
   the old unbounded dot row, and video pages have play/pause, a scrubbing
   slider and elapsed/total time. Double-tap toggles 2.5× zoom around the tapped
-  point and remains reliable when already zoomed. A Settings switch makes the
-  last-media thumbnail open the latest item externally instead; the “Ask Which
-  App to Open Media” switch forces the portal app chooser for external opens.
-  On a keyboard, the arrow keys change pages, Space/Return play or pause a
-  video, and Escape closes the viewer
+  point and remains reliable when already zoomed. Swipe right on the newest
+  photo (or use Back/Escape) to return to the camera; older photos keep the
+  carousel swipe and use the Back button. Swipe up for a bottom info sheet, and
+  use the header info button as a clickable alternative. The header
+  trash button (or Delete/BackSpace) moves the current item to the trash after
+  confirmation. A Settings switch makes the last-media thumbnail
+  open the latest item externally instead; the “Ask Which App to Open Media”
+  switch forces the portal app chooser for external opens. On a keyboard, the
+  arrow keys change pages, Space/Return play or pause a video, Delete moves the
+  current item to the trash, and Escape closes the viewer
 - a Keyboard Shortcuts sheet in the hamburger menu, listing the camera, gallery
   and application bindings
 - optional GPS tagging for photos: uses the system location service, writes a
@@ -90,10 +96,9 @@ with a video player, and GPS tagging inside a Flatpak. Feature parity with FuriC
 
 Not implemented yet:
 
-- richer gallery features (delete/share, event-level double-tap zoom,
-  persistent photo thumbnails), video GPS tags, manual focus, HDR and RAW. The
-  engine already exposes most of these through its C API; the UI is the
-  remaining work.
+- gallery sharing, event-level double-tap zoom and persistent photo
+  thumbnails; video GPS tags, manual focus, HDR and RAW. The engine already
+  exposes most of these through its C API; the UI is the remaining work.
 
 Known limitations:
 
@@ -112,8 +117,10 @@ Known limitations:
 - Manual exposure is reset to auto on camera or mode changes. Manual focus is
   exposed by the engine but not in the UI: the phone's HAL ignores focus
   requests and leaves the lens fixed at its closest position.
-- The gallery is read-only for now: no delete/share, and video playback depends
-  on the runtime's GStreamer H.264/AAC decoders (present on FuriOS).
+- Gallery deletion moves items to the filesystem trash, which can be restored
+  from the file manager; empty the trash to reclaim space. Sharing is not
+  implemented yet. Video playback depends on the runtime's GStreamer H.264/AAC
+  decoders (present on FuriOS).
 - The preview is portrait-locked by design; saved photos and videos follow the
   device tilt.
 - The Flatpak is self-hosted because it needs `--device=all` and the Halium
