@@ -1251,7 +1251,27 @@ fn build_gallery(parent: &CameraWindow, start_index: usize) -> adw::NavigationPa
                 let remaining = items.len().saturating_sub(1);
                 let new_index = index.min(remaining.saturating_sub(1));
                 let new_page = build_gallery(&parent, new_index);
-                navigation.replace(&[new_page]);
+
+                // AdwNavigationView::replace() drops every remove-on-pop page
+                // that is not passed to it, including the camera page the
+                // gallery sits on, leaving the rebuilt page without a Back
+                // button. Keep the rest of the stack (normally just the
+                // camera) and replace only the gallery page.
+                let stack = navigation.navigation_stack();
+                let mut pages = Vec::new();
+                for index in 0..stack.n_items() {
+                    let Some(page) = stack
+                        .item(index)
+                        .and_then(|item| item.downcast::<adw::NavigationPage>().ok())
+                    else {
+                        continue;
+                    };
+                    if page.tag().as_deref() != Some("gallery") {
+                        pages.push(page);
+                    }
+                }
+                pages.push(new_page);
+                navigation.replace(&pages);
             });
             dialog.present(Some(&action_parent));
         })
