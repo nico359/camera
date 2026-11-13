@@ -12,6 +12,7 @@
     <p>Version 0.3.0 rounds out media handling: a full-window gallery with swipe navigation, pinch zoom and in-app video playback, cached video posters, and optional GPS tagging for photos that only uses fresh, accurate fixes.</p>
     <p>Version 0.4.0 adds a manual-exposure Pro panel, a keyboard-shortcuts sheet, a compact gallery pager, video scrubbing controls, reliable double-tap zoom and uninterrupted panning in the gallery viewer.</p>
     <p>Version 0.5.0 adds gallery swipe gestures, a file-info sheet and deletion with confirmation.</p>
+    <p>Version 0.5.1 fixes startup on devices without the Camera2/Halium backend and keeps the gallery Back button available after deleting the last item.</p>
     <p>Photos and videos are saved to the standard Pictures/Camera and Videos/Camera folders. The last-media thumbnail can instead open the latest item in the system viewer.</p>
   </description>
 
@@ -57,11 +58,11 @@
   <screenshots>
     <screenshot type="default">
       <caption>Photo mode</caption>
-      <image>https://raw.githubusercontent.com/nico359/camera/v0.5.0/data/screenshot-photo.png</image>
+      <image>https://raw.githubusercontent.com/nico359/camera/v0.5.1/data/screenshot-photo.png</image>
     </screenshot>
     <screenshot>
       <caption>Video mode</caption>
-      <image>https://raw.githubusercontent.com/nico359/camera/v0.5.0/data/screenshot-video.png</image>
+      <image>https://raw.githubusercontent.com/nico359/camera/v0.5.1/data/screenshot-video.png</image>
     </screenshot>
   </screenshots>
 
@@ -73,6 +74,15 @@
   <content_rating type="oars-1.1" />
 
   <releases>
+    <release version="0.5.1" date="2026-11-13" type="stable">
+      <description translate="no">
+        <p>Bug-fix release.</p>
+        <ul>
+          <li>Open with a clear unsupported-device message instead of crashing when the Camera2/Halium backend is unavailable</li>
+          <li>Keep the gallery Back button after deleting the last photo or video</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.5.0" date="2026-11-12" type="stable">
       <description translate="no">
         <p>Gallery management release.</p>
