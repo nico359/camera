@@ -37,6 +37,7 @@ mod imp {
         pub touch_count: Cell<u32>,
         pub touch_sequence: RefCell<Option<gdk::EventSequence>>,
         pub info_cb: RefCell<Option<Rc<dyn Fn()>>>,
+        pub back_cb: RefCell<Option<Rc<dyn Fn()>>>,
     }
 
     impl Default for ZoomPicture {
@@ -55,6 +56,7 @@ mod imp {
                 touch_count: Cell::new(0),
                 touch_sequence: RefCell::new(None),
                 info_cb: RefCell::new(None),
+                back_cb: RefCell::new(None),
             }
         }
     }
@@ -216,6 +218,10 @@ impl ZoomPicture {
         *self.imp().info_cb.borrow_mut() = Some(callback);
     }
 
+    pub fn set_back_callback(&self, callback: Rc<dyn Fn()>) {
+        *self.imp().back_cb.borrow_mut() = Some(callback);
+    }
+
     pub fn set_texture(&self, texture: Option<&gdk::Texture>) {
         *self.imp().texture.borrow_mut() = texture.cloned();
         self.reset();
@@ -371,7 +377,11 @@ impl ZoomPicture {
 
         let dx = x - start_x;
         let dy = y - start_y;
-        if dy <= -SWIPE_DISTANCE && dy.abs() > dx.abs() * 1.4 {
+        if dx > SWIPE_DISTANCE && dx > dy.abs() * 1.2 {
+            if let Some(callback) = self.imp().back_cb.borrow().clone() {
+                callback();
+            }
+        } else if dy <= -SWIPE_DISTANCE && dy.abs() > dx.abs() * 1.4 {
             if let Some(callback) = self.imp().info_cb.borrow().clone() {
                 callback();
             }

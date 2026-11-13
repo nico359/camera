@@ -250,13 +250,16 @@ struct PhotoPage {
 }
 
 impl PhotoPage {
-    fn new(path: &Path, info: Rc<dyn Fn()>) -> Rc<Self> {
+    fn new(path: &Path, back: Option<Rc<dyn Fn()>>, info: Rc<dyn Fn()>) -> Rc<Self> {
         let root = gtk::Overlay::new();
         root.add_css_class("gallery-page");
         root.set_hexpand(true);
         root.set_vexpand(true);
 
         let picture = ZoomPicture::new();
+        if let Some(back) = back {
+            picture.set_back_callback(back);
+        }
         picture.set_info_callback(info);
         root.set_child(Some(&picture));
 
@@ -958,6 +961,25 @@ fn start_poster_prewarm(
     tick
 }
 
+/// The navigation view's internal swipe tracker is a capture-phase drag
+/// gesture that claims horizontal drags even when they start in the middle of
+/// a zoomed photo. Keep it disabled and provide a wider left-edge swipe below;
+/// the navigation page still has its standard Back button and Escape shortcut.
+fn disable_navigation_swipe(navigation: &adw::NavigationView) {
+    let controllers = navigation.observe_controllers();
+    for index in 0..controllers.n_items() {
+        let Some(controller) = controllers.item(index) else {
+            continue;
+        };
+        let Ok(controller) = controller.downcast::<gtk::EventController>() else {
+            continue;
+        };
+        if controller.is::<gtk::GestureDrag>() || controller.is::<gtk::EventControllerScroll>() {
+            controller.set_propagation_phase(gtk::PropagationPhase::None);
+        }
+    }
+}
+
 pub fn present(parent: &CameraWindow) {
     let navigation = parent.navigation_view();
     if navigation.find_page("gallery").is_some() {
@@ -969,6 +991,7 @@ pub fn present(parent: &CameraWindow) {
 
 fn build_gallery(parent: &CameraWindow, start_index: usize) -> adw::NavigationPage {
     let navigation = parent.navigation_view();
+    disable_navigation_swipe(&navigation);
 
     let items = Rc::new(media::scan_media());
 
@@ -1016,7 +1039,10 @@ fn build_gallery(parent: &CameraWindow, start_index: usize) -> adw::NavigationPa
     let title = adw::WindowTitle::new(&gettext("Gallery"), "");
     header.set_title_widget(Some(&title));
 
-    let external = gtk::Button::from_icon_name("window-new-symbolic");
+    let external = gtk::Button::new();
+    external.set_child(Some(&gtk::Image::from_resource(
+        "/io/github/nico359/camera/icons/open-external-symbolic.svg",
+    )));
     external.set_tooltip_text(Some(&gettext("Open Externally")));
     external.add_css_class("flat");
     header.pack_end(&external);
@@ -1027,7 +1053,7 @@ fn build_gallery(parent: &CameraWindow, start_index: usize) -> adw::NavigationPa
     delete.set_visible(!items.is_empty());
     header.pack_end(&delete);
 
-    let info = gtk::Button::from_icon_name("dialog-information-symbolic");
+    let info = gtk::Button::from_icon_name("help-about-symbolic");
     info.set_tooltip_text(Some(&gettext("Info")));
     info.add_css_class("flat");
     info.set_visible(!items.is_empty());
@@ -1062,11 +1088,19 @@ fn build_gallery(parent: &CameraWindow, start_index: usize) -> adw::NavigationPa
             media: PageMedia::Empty,
         });
     } else {
-        for item in items.iter() {
+        for (index, item) in items.iter().enumerate() {
             match item.kind {
                 MediaKind::Photo => {
                     let photo = PhotoPage::new(
                         &item.path,
+                        (index == 0).then(|| {
+                            let navigation = navigation.downgrade();
+                            Rc::new(move || {
+                                if let Some(navigation) = navigation.upgrade() {
+                                    navigation.pop();
+                                }
+                            }) as Rc<dyn Fn()>
+                        }),
                         info_callback(&info_sheet, &info_container, &item.path),
                     );
                     carousel.append(&photo.root);
