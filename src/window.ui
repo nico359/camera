@@ -23,7 +23,6 @@
                         <property name="spacing">6</property>
                         <child>
                           <object class="GtkMenuButton" id="camera_menu_button">
-                            <property name="icon-name">view-grid-symbolic</property>
                             <property name="tooltip-text" translatable="yes">Choose Camera</property>
                             <property name="sensitive">False</property>
                           </object>

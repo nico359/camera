@@ -496,6 +496,11 @@ mod imp {
         fn setup_actions(&self) {
             let window = self.obj();
 
+            self.camera_menu_button
+                .set_child(Some(&gtk::Image::from_resource(
+                    "/io/github/nico359/camera/icons/camera-select-symbolic.svg",
+                )));
+
             let capture = gio::SimpleAction::new("capture", None);
             capture.set_enabled(false);
             let weak = window.downgrade();
