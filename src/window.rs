@@ -1550,7 +1550,25 @@ impl CameraWindow {
     fn load_latest_media(&self) {
         if let Some(path) = crate::media::latest_media() {
             self.update_media_thumbnail(&path);
+        } else {
+            if let Some(media) = self.imp().last_video_media.borrow_mut().take() {
+                media.pause();
+            }
+            self.imp()
+                .last_photo_picture
+                .set_paintable(None::<&gtk::gdk::Paintable>);
+            self.imp()
+                .last_video_picture
+                .set_paintable(None::<&gtk::gdk::Paintable>);
+            self.imp()
+                .last_media_stack
+                .set_visible_child(&self.imp().last_video_icon.get());
+            self.imp().last_photo_button.set_visible(false);
         }
+    }
+
+    pub(crate) fn refresh_latest_media(&self) {
+        self.load_latest_media();
     }
 
     /// Brief blackout over the preview, the way most camera apps acknowledge a

@@ -35,6 +35,86 @@ fn file_name(path: &Path) -> String {
         .to_string()
 }
 
+/// Human-readable file size for the info sheet.
+fn format_size(bytes: u64) -> String {
+    const UNITS: [&str; 4] = ["B", "KB", "MB", "GB"];
+    let mut value = bytes as f64;
+    let mut unit = 0;
+    while value >= 1024.0 && unit + 1 < UNITS.len() {
+        value /= 1024.0;
+        unit += 1;
+    }
+    if unit == 0 {
+        format!("{bytes} {}", UNITS[unit])
+    } else {
+        format!("{value:.1} {}", UNITS[unit])
+    }
+}
+
+fn info_callback(sheet: &adw::BottomSheet, container: &gtk::Box, path: &Path) -> Rc<dyn Fn()> {
+    let sheet = sheet.clone();
+    let container = container.clone();
+    let path = path.to_path_buf();
+    Rc::new(move || show_info_sheet(&sheet, &container, &path))
+}
+
+fn info_row(title: &str, subtitle: &str) -> adw::ActionRow {
+    let row = adw::ActionRow::new();
+    row.set_title(title);
+    row.set_subtitle(subtitle);
+    row.set_activatable(false);
+    row
+}
+
+/// Fill and open the bottom info sheet for a photo or video.
+fn show_info_sheet(sheet: &adw::BottomSheet, container: &gtk::Box, path: &Path) {
+    let name = file_name(path);
+    let metadata = std::fs::metadata(path).ok();
+    let size = metadata.as_ref().map(|meta| meta.len()).unwrap_or(0);
+    let modified = metadata
+        .as_ref()
+        .and_then(|meta| meta.modified().ok())
+        .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
+        .and_then(|duration| gtk::glib::DateTime::from_unix_local(duration.as_secs() as i64).ok())
+        .and_then(|date| date.format("%Y-%m-%d %H:%M").ok())
+        .map(|date| date.to_string())
+        .unwrap_or_else(|| gettext("Unknown"));
+
+    let is_video = path
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .is_some_and(|extension| extension.eq_ignore_ascii_case("mp4"));
+    let kind = if is_video {
+        gettext("Video")
+    } else {
+        gettext("Photo")
+    };
+    let dimensions = if is_video {
+        None
+    } else {
+        image::image_dimensions(path)
+            .ok()
+            .map(|(width, height)| format!("{width} × {height}"))
+    };
+
+    while let Some(child) = container.first_child() {
+        container.remove(&child);
+    }
+
+    let group = adw::PreferencesGroup::new();
+    group.set_title(&gettext("Details"));
+    group.add(&info_row(&gettext("Name"), &name));
+    group.add(&info_row(&gettext("Type"), &kind));
+    if let Some(dimensions) = dimensions.as_deref() {
+        group.add(&info_row(&gettext("Dimensions"), dimensions));
+    }
+    group.add(&info_row(&gettext("Size"), &format_size(size)));
+    group.add(&info_row(&gettext("Modified"), &modified));
+    group.add(&info_row(&gettext("Location"), &path.to_string_lossy()));
+    container.append(&group);
+    sheet.set_open(true);
+}
+
 /// Small LRU cache of decoded textures, keyed by file path.
 struct TextureCache {
     order: VecDeque<PathBuf>,
@@ -65,6 +145,11 @@ impl TextureCache {
             }
         }
     }
+
+    fn remove(&mut self, path: &Path) {
+        self.textures.remove(path);
+        self.order.retain(|entry| entry != path);
+    }
 }
 
 thread_local! {
@@ -92,6 +177,16 @@ pub(crate) fn store_video_poster(path: &Path, texture: &gdk::Texture) {
             let _ = std::fs::create_dir_all(directory);
         }
         let _ = texture.save_to_png(&cache_path);
+    }
+}
+
+/// Drop the in-memory and persistent caches for a media file. Call before
+/// deleting the file, while the metadata is still available.
+pub(crate) fn remove_media_caches(path: &Path) {
+    PHOTO_CACHE.with(|cache| cache.borrow_mut().remove(path));
+    POSTER_CACHE.with(|cache| cache.borrow_mut().remove(path));
+    if let Some(cache_path) = poster_cache_path(path) {
+        let _ = std::fs::remove_file(cache_path);
     }
 }
 
@@ -155,13 +250,14 @@ struct PhotoPage {
 }
 
 impl PhotoPage {
-    fn new(path: &Path) -> Rc<Self> {
+    fn new(path: &Path, info: Rc<dyn Fn()>) -> Rc<Self> {
         let root = gtk::Overlay::new();
         root.add_css_class("gallery-page");
         root.set_hexpand(true);
         root.set_vexpand(true);
 
         let picture = ZoomPicture::new();
+        picture.set_info_callback(info);
         root.set_child(Some(&picture));
 
         let spinner = gtk::Spinner::new();
@@ -293,7 +389,7 @@ struct VideoPage {
 }
 
 impl VideoPage {
-    fn new(path: &Path) -> Rc<Self> {
+    fn new(path: &Path, info: Rc<dyn Fn()>) -> Rc<Self> {
         let root = gtk::Overlay::new();
         root.add_css_class("gallery-page");
         root.set_hexpand(true);
@@ -306,6 +402,15 @@ impl VideoPage {
         picture.set_vexpand(true);
         picture.add_css_class("gallery-video");
         root.set_child(Some(&picture));
+
+        let drag = gtk::GestureDrag::new();
+        let info_cb = info.clone();
+        drag.connect_drag_end(move |_, dx, dy| {
+            if dy <= -80.0 && dy.abs() > dx.abs() * 1.4 {
+                info_cb();
+            }
+        });
+        picture.add_controller(drag);
 
         let spinner = gtk::Spinner::new();
         spinner.set_halign(gtk::Align::Center);
@@ -853,48 +958,60 @@ fn start_poster_prewarm(
     tick
 }
 
-/// The navigation view's swipe tracker is a capture-phase drag gesture. It
-/// still claims horizontal drags when the visible page has `can-pop` disabled,
-/// which cancels panning in the photo viewer. The gallery is the only page in
-/// this navigation view, so disable the tracker's drag/scroll controllers and
-/// use the explicit Back button instead.
-fn disable_navigation_swipe(navigation: &adw::NavigationView) {
-    let controllers = navigation.observe_controllers();
-    for index in 0..controllers.n_items() {
-        let Some(controller) = controllers.item(index) else {
-            continue;
-        };
-        let Ok(controller) = controller.downcast::<gtk::EventController>() else {
-            continue;
-        };
-        if controller.is::<gtk::GestureDrag>() || controller.is::<gtk::EventControllerScroll>() {
-            controller.set_propagation_phase(gtk::PropagationPhase::None);
-        }
-    }
-}
-
 pub fn present(parent: &CameraWindow) {
     let navigation = parent.navigation_view();
     if navigation.find_page("gallery").is_some() {
         return;
     }
+    let page = build_gallery(parent, 0);
+    navigation.push(&page);
+}
 
-    disable_navigation_swipe(&navigation);
+fn build_gallery(parent: &CameraWindow, start_index: usize) -> adw::NavigationPage {
+    let navigation = parent.navigation_view();
 
     let items = Rc::new(media::scan_media());
 
-    let header = adw::HeaderBar::new();
+    let info_sheet = adw::BottomSheet::new();
+    info_sheet.set_show_drag_handle(true);
 
-    let back = gtk::Button::from_icon_name("go-previous-symbolic");
-    back.add_css_class("flat");
-    back.set_tooltip_text(Some(&gettext("Back")));
-    let nav_weak = navigation.downgrade();
-    back.connect_clicked(move |_| {
-        if let Some(navigation) = nav_weak.upgrade() {
-            navigation.pop();
-        }
-    });
-    header.pack_start(&back);
+    let info_container = gtk::Box::new(gtk::Orientation::Vertical, 0);
+    info_container.set_margin_start(18);
+    info_container.set_margin_end(18);
+    info_container.set_margin_top(6);
+    info_container.set_margin_bottom(18);
+
+    let info_scroller = gtk::ScrolledWindow::new();
+    info_scroller.set_policy(gtk::PolicyType::Never, gtk::PolicyType::Automatic);
+    info_scroller.set_child(Some(&info_container));
+    info_scroller.set_vexpand(true);
+
+    let info_title = gtk::Label::new(Some(&gettext("Info")));
+    info_title.add_css_class("title-3");
+    info_title.set_hexpand(true);
+    info_title.set_xalign(0.0);
+
+    let info_close = gtk::Button::from_icon_name("window-close-symbolic");
+    info_close.add_css_class("flat");
+    info_close.set_tooltip_text(Some(&gettext("Close")));
+    let close_sheet = info_sheet.clone();
+    info_close.connect_clicked(move |_| close_sheet.set_open(false));
+
+    let info_header = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+    info_header.set_margin_start(18);
+    info_header.set_margin_end(18);
+    info_header.set_margin_top(12);
+    info_header.set_margin_bottom(6);
+    info_header.append(&info_title);
+    info_header.append(&info_close);
+
+    let info_view = gtk::Box::new(gtk::Orientation::Vertical, 0);
+    info_view.append(&info_header);
+    info_view.append(&info_scroller);
+    info_view.set_height_request(420);
+    info_sheet.set_sheet(Some(&info_view));
+
+    let header = adw::HeaderBar::new();
 
     let title = adw::WindowTitle::new(&gettext("Gallery"), "");
     header.set_title_widget(Some(&title));
@@ -903,6 +1020,18 @@ pub fn present(parent: &CameraWindow) {
     external.set_tooltip_text(Some(&gettext("Open Externally")));
     external.add_css_class("flat");
     header.pack_end(&external);
+
+    let delete = gtk::Button::from_icon_name("user-trash-symbolic");
+    delete.set_tooltip_text(Some(&gettext("Move to Trash")));
+    delete.add_css_class("flat");
+    delete.set_visible(!items.is_empty());
+    header.pack_end(&delete);
+
+    let info = gtk::Button::from_icon_name("dialog-information-symbolic");
+    info.set_tooltip_text(Some(&gettext("Info")));
+    info.add_css_class("flat");
+    info.set_visible(!items.is_empty());
+    header.pack_end(&info);
 
     let carousel = adw::Carousel::new();
     carousel.set_hexpand(true);
@@ -936,7 +1065,10 @@ pub fn present(parent: &CameraWindow) {
         for item in items.iter() {
             match item.kind {
                 MediaKind::Photo => {
-                    let photo = PhotoPage::new(&item.path);
+                    let photo = PhotoPage::new(
+                        &item.path,
+                        info_callback(&info_sheet, &info_container, &item.path),
+                    );
                     carousel.append(&photo.root);
                     entries.push(PageEntry {
                         widget: photo.root.clone().upcast(),
@@ -944,7 +1076,10 @@ pub fn present(parent: &CameraWindow) {
                     });
                 }
                 MediaKind::Video => {
-                    let video = VideoPage::new(&item.path);
+                    let video = VideoPage::new(
+                        &item.path,
+                        info_callback(&info_sheet, &info_container, &item.path),
+                    );
                     carousel.append(&video.root);
                     entries.push(PageEntry {
                         widget: video.root.clone().upcast(),
@@ -957,6 +1092,8 @@ pub fn present(parent: &CameraWindow) {
 
     let entries = Rc::new(entries);
 
+    let first = start_index.min(entries.len().saturating_sub(1));
+
     let pager = gtk::Label::new(None);
     pager.add_css_class("gallery-pager");
     pager.set_halign(gtk::Align::Center);
@@ -964,7 +1101,7 @@ pub fn present(parent: &CameraWindow) {
     pager.set_margin_bottom(10);
     pager.set_visible(items.len() > 1);
     if items.len() > 1 {
-        pager.set_label(&format!("1 / {}", items.len()));
+        pager.set_label(&format!("{} / {}", first + 1, items.len()));
     }
 
     let content = gtk::Box::new(gtk::Orientation::Vertical, 0);
@@ -975,19 +1112,19 @@ pub fn present(parent: &CameraWindow) {
     let toast = adw::ToastOverlay::new();
     toast.set_child(Some(&content));
 
+    info_sheet.set_content(Some(&toast));
+
     let toolbar = adw::ToolbarView::new();
     toolbar.add_top_bar(&header);
-    toolbar.set_content(Some(&toast));
+    toolbar.set_content(Some(&info_sheet));
 
     let page = adw::NavigationPage::new(&toolbar, &gettext("Gallery"));
     page.set_tag(Some("gallery"));
-    // Paging is handled by the carousel; the navigation swipe-back would
-    // compete with panning a zoomed photo, so use the Back button instead.
-    page.set_can_pop(false);
+    // The navigation view's swipe tracker is disabled below so it cannot steal
+    // pans; keep its standard Back button and Escape shortcut.
 
     let current = Rc::new(RefCell::new(None));
 
-    let first = carousel.position().round().max(0.0) as usize;
     if let Some(entry) = entries.get(first) {
         entry.load();
     }
@@ -996,7 +1133,7 @@ pub fn present(parent: &CameraWindow) {
     for entry in entries.iter().skip(first + 1).take(2) {
         entry.prefetch();
     }
-    if let Some(item) = items.first() {
+    if let Some(item) = items.get(first) {
         title.set_subtitle(&file_name(&item.path));
         *current.borrow_mut() = Some(item.path.clone());
     }
@@ -1030,20 +1167,79 @@ pub fn present(parent: &CameraWindow) {
         prefetch_neighbors(&entries_cb, index);
     });
 
+    let delete_action: Rc<dyn Fn()> = {
+        let action_carousel = carousel.clone();
+        let action_items = Rc::clone(&items);
+        let action_navigation = navigation.clone();
+        let action_parent = parent.clone();
+        let action_toast = toast.clone();
+        Rc::new(move || {
+            let index = action_carousel.position().round().max(0.0) as usize;
+            let Some(item) = action_items.get(index) else {
+                return;
+            };
+            let path = item.path.clone();
+            let name = file_name(&path);
+            let dialog = adw::AlertDialog::new(
+                Some(&gettext("Move to Trash?")),
+                Some(&format!(
+                    "{}: {}",
+                    gettext("The item will be moved to the trash and can be restored."),
+                    name
+                )),
+            );
+            dialog.add_response("cancel", &gettext("Cancel"));
+            dialog.add_response("trash", &gettext("Move to Trash"));
+            dialog.set_response_appearance("trash", adw::ResponseAppearance::Destructive);
+            dialog.set_default_response(Some("cancel"));
+            dialog.set_close_response("cancel");
+
+            let path = path.clone();
+            let items = Rc::clone(&action_items);
+            let navigation = action_navigation.clone();
+            let parent = action_parent.clone();
+            let toast = action_toast.clone();
+            dialog.connect_response(None, move |_, response| {
+                if response != "trash" {
+                    return;
+                }
+
+                remove_media_caches(&path);
+                if let Err(error) = gio::File::for_path(&path).trash(None::<&gio::Cancellable>) {
+                    toast.add_toast(adw::Toast::new(&format!(
+                        "{}: {error}",
+                        gettext("Could not move media to Trash")
+                    )));
+                    return;
+                }
+
+                parent.refresh_latest_media();
+                let remaining = items.len().saturating_sub(1);
+                let new_index = index.min(remaining.saturating_sub(1));
+                let new_page = build_gallery(&parent, new_index);
+                navigation.replace(&[new_page]);
+            });
+            dialog.present(Some(&action_parent));
+        })
+    };
+
     let entries_cb = Rc::clone(&entries);
     let carousel_cb = carousel.clone();
-    let navigation_cb = navigation.downgrade();
+    let delete_keys = Rc::clone(&delete_action);
     let keys = gtk::EventControllerKey::new();
     keys.set_propagation_phase(gtk::PropagationPhase::Capture);
     keys.connect_key_pressed(move |_, keyval, _, _| {
-        if keyval == gdk::Key::Escape {
-            if let Some(navigation) = navigation_cb.upgrade() {
-                navigation.pop();
-            }
-            return gtk::glib::Propagation::Stop;
+        // Let focused header buttons and video controls handle their own keys.
+        if !carousel_cb.has_focus() {
+            return gtk::glib::Propagation::Proceed;
         }
 
         let current = carousel_cb.position().round().max(0.0) as usize;
+
+        if matches!(keyval, gdk::Key::Delete | gdk::Key::BackSpace) {
+            delete_keys();
+            return gtk::glib::Propagation::Stop;
+        }
 
         if matches!(keyval, gdk::Key::space | gdk::Key::Return) {
             if let Some(entry) = entries_cb.get(current) {
@@ -1089,8 +1285,23 @@ pub fn present(parent: &CameraWindow) {
     toolbar.add_controller(keys);
 
     let carousel_focus = carousel.clone();
+    let carousel_start = carousel.clone();
+    let start_widget = entries[first].widget.clone();
+    let initial_scroll = Rc::new(Cell::new(false));
     toolbar.connect_map(move |_| {
         carousel_focus.grab_focus();
+        if !initial_scroll.replace(true) {
+            carousel_start.scroll_to(&start_widget, false);
+        }
+    });
+
+    let info_sheet_cb = info_sheet.clone();
+    let info_container_cb = info_container.clone();
+    let current_info = Rc::clone(&current);
+    info.connect_clicked(move |_| {
+        if let Some(path) = current_info.borrow().clone() {
+            show_info_sheet(&info_sheet_cb, &info_container_cb, &path);
+        }
     });
 
     let current_cb = Rc::clone(&current);
@@ -1114,7 +1325,8 @@ pub fn present(parent: &CameraWindow) {
         });
     });
 
-    navigation.push(&page);
+    let delete_click = Rc::clone(&delete_action);
+    delete.connect_clicked(move |_| delete_click());
 
     let warm_tick = start_poster_prewarm(carousel.clone(), Rc::clone(&entries), first);
     toolbar.connect_unmap(move |_| {
@@ -1122,4 +1334,6 @@ pub fn present(parent: &CameraWindow) {
             id.remove();
         }
     });
+
+    page
 }

@@ -7,6 +7,7 @@
 //! Paging is disabled while zoomed so drags pan instead of changing pages.
 
 use std::cell::{Cell, RefCell};
+use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use adw::prelude::*;
@@ -17,6 +18,7 @@ const MAX_SCALE: f64 = 5.0;
 const DOUBLE_TAP_SCALE: f64 = 2.5;
 const ZOOMED_EPSILON: f64 = 1.01;
 const ANIMATION: Duration = Duration::from_millis(180);
+const SWIPE_DISTANCE: f64 = 80.0;
 
 mod imp {
     use super::*;
@@ -34,6 +36,7 @@ mod imp {
         pub last_tap: Cell<Option<(u32, f64, f64)>>,
         pub touch_count: Cell<u32>,
         pub touch_sequence: RefCell<Option<gdk::EventSequence>>,
+        pub info_cb: RefCell<Option<Rc<dyn Fn()>>>,
     }
 
     impl Default for ZoomPicture {
@@ -51,6 +54,7 @@ mod imp {
                 last_tap: Cell::new(None),
                 touch_count: Cell::new(0),
                 touch_sequence: RefCell::new(None),
+                info_cb: RefCell::new(None),
             }
         }
     }
@@ -208,6 +212,10 @@ impl ZoomPicture {
         glib::Object::new()
     }
 
+    pub fn set_info_callback(&self, callback: Rc<dyn Fn()>) {
+        *self.imp().info_cb.borrow_mut() = Some(callback);
+    }
+
     pub fn set_texture(&self, texture: Option<&gdk::Texture>) {
         *self.imp().texture.borrow_mut() = texture.cloned();
         self.reset();
@@ -272,19 +280,8 @@ impl ZoomPicture {
                 if button.button() != gdk::BUTTON_PRIMARY {
                     return;
                 }
-                let Some((time, start_x, start_y)) = self.imp().tap_start.take() else {
-                    return;
-                };
-                if self.imp().tap_moved.get() {
-                    return;
-                }
-                let Some(position) = self.event_position(event) else {
-                    return;
-                };
-                if squared_distance(position, (start_x, start_y))
-                    <= self.double_click_distance().powi(2)
-                {
-                    self.register_tap(time, position.0, position.1);
+                if let Some(position) = self.event_position(event) {
+                    self.finish_gesture(position.0, position.1);
                 }
             }
             gdk::EventType::TouchBegin => {
@@ -340,18 +337,12 @@ impl ZoomPicture {
                     .as_ref()
                     .is_some_and(|stored| stored == &sequence);
                 if primary {
-                    let start = self.imp().tap_start.take();
-                    let moved = self.imp().tap_moved.get();
-                    if event.event_type() == gdk::EventType::TouchEnd && !moved && count == 0 {
-                        if let (Some((time, start_x, start_y)), Some(position)) =
-                            (start, self.event_position(event))
-                        {
-                            if squared_distance(position, (start_x, start_y))
-                                <= self.double_click_distance().powi(2)
-                            {
-                                self.register_tap(time, position.0, position.1);
-                            }
+                    if event.event_type() == gdk::EventType::TouchEnd && count == 0 {
+                        if let Some(position) = self.event_position(event) {
+                            self.finish_gesture(position.0, position.1);
                         }
+                    } else {
+                        self.imp().tap_start.take();
                     }
                     self.imp().touch_sequence.borrow_mut().take();
                 }
@@ -360,6 +351,30 @@ impl ZoomPicture {
                 }
             }
             _ => {}
+        }
+    }
+
+    fn finish_gesture(&self, x: f64, y: f64) {
+        let Some((time, start_x, start_y)) = self.imp().tap_start.take() else {
+            return;
+        };
+        let double_distance = self.double_click_distance();
+        let distance = squared_distance((x, y), (start_x, start_y));
+        if !self.imp().tap_moved.get() && distance <= double_distance.powi(2) {
+            self.register_tap(time, x, y);
+            return;
+        }
+
+        if self.scale() > ZOOMED_EPSILON {
+            return;
+        }
+
+        let dx = x - start_x;
+        let dy = y - start_y;
+        if dy <= -SWIPE_DISTANCE && dy.abs() > dx.abs() * 1.4 {
+            if let Some(callback) = self.imp().info_cb.borrow().clone() {
+                callback();
+            }
         }
     }
 
