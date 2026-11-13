@@ -33,9 +33,13 @@ struct fc2_camera {
 
 extern "C" {
 
+int camera2_runtime_available(void);
+
 int fc2_available(void)
 {
-    return CameraSession::isHostStub() ? 0 : 1;
+    if (CameraSession::isHostStub())
+        return 0;
+    return camera2_runtime_available();
 }
 
 fc2_camera* fc2_open_id(const char* id)

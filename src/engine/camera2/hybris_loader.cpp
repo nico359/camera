@@ -70,6 +70,16 @@ Hybris &hybris()
 
 extern "C" {
 
+// Whether libhybris (and the Android NDK entry points the engine calls) is
+// actually available at runtime.  The build-time host-stub check is not
+// enough: a normal build running on a desktop without libhybris still links
+// these wrappers, and calling through a NULL android_dlsym() would crash.
+int camera2_runtime_available(void)
+{
+    Hybris &h = hybris();
+    return h.handle && h.dlopen_fn && h.dlsym_fn && h.dlclose_fn;
+}
+
 void *android_dlopen(const char *filename, int flag)
 {
     Hybris &h = hybris();

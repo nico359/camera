@@ -10,6 +10,7 @@ use std::cell::{Cell, RefCell};
 use std::path::Path;
 use std::time::Duration;
 
+use gettextrs::gettext;
 use gtk::gio::prelude::*;
 use gtk::glib;
 use gtk::prelude::*;
@@ -156,7 +157,12 @@ mod imp {
                     self.start_tick();
                 }
                 Err(error) => {
-                    obj.set_status(format!("Camera unavailable: {error}"));
+                    let message = if matches!(error, CameraError::Unavailable) {
+                        gettext("Camera is not supported on this device")
+                    } else {
+                        format!("{}: {error}", gettext("Camera unavailable"))
+                    };
+                    obj.set_status(message);
                     obj.set_ready(false);
                     self.session.borrow_mut().close();
                 }
