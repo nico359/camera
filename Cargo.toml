@@ -22,7 +22,7 @@ tokio = { version = "1", features = ["rt", "macros"] }
 [dependencies.adw]
 package = "libadwaita"
 version = "0.7"
-features = ["v1_6"]
+features = ["v1_6", "v1_7"]
 
 [build-dependencies]
 cc = "1"

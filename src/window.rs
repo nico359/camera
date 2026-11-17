@@ -34,6 +34,15 @@ use crate::level_sensor::LevelSensor;
 use crate::settings::AppSettings;
 use crate::ui::CameraView;
 
+/// In-flight HDR burst state, collected from the still-capture callbacks.
+struct HdrBurst {
+    temp_paths: Vec<PathBuf>,
+    output_path: PathBuf,
+    ev0_path: Option<PathBuf>,
+    callbacks: u8,
+    failed: bool,
+}
+
 /// 3x3 composition grid, drawn over the preview image itself.
 fn draw_grid(cr: &gtk::cairo::Context, width: f64, height: f64) {
     for i in 1..3 {
@@ -47,6 +56,16 @@ fn draw_grid(cr: &gtk::cairo::Context, width: f64, height: f64) {
         cr.line_to(width, y);
         let _ = cr.stroke();
     }
+}
+
+/// Name the fused HDR result next to the normal photo path, marking it _HDR.
+fn next_hdr_path() -> Result<PathBuf, String> {
+    let path = crate::media::next_photo_path()?;
+    let stem = path
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .ok_or_else(|| "invalid photo path".to_string())?;
+    Ok(path.with_file_name(format!("{stem}_HDR.jpg")))
 }
 
 /// Render one decoded video frame at up to `max_size` on its longest edge.
@@ -175,6 +194,9 @@ mod imp {
         pub flash_menu_button: TemplateChild<gtk::MenuButton>,
 
         #[template_child]
+        pub flash_icon: TemplateChild<gtk::Image>,
+
+        #[template_child]
         pub last_photo_button: TemplateChild<gtk::Button>,
 
         #[template_child]
@@ -227,6 +249,9 @@ mod imp {
 
         #[template_child]
         pub manual_controls_button: TemplateChild<gtk::ToggleButton>,
+
+        #[template_child]
+        pub hdr_button: TemplateChild<gtk::ToggleButton>,
 
         #[template_child]
         pub manual_revealer: TemplateChild<gtk::Revealer>,
@@ -282,6 +307,9 @@ mod imp {
         pub(super) last_video_media: RefCell<Option<gtk::MediaFile>>,
         pub(super) manual_active: Cell<bool>,
         pub(super) manual_syncing: Cell<bool>,
+        pub(super) hdr_enabled: Cell<bool>,
+        pub(super) hdr_busy: Cell<bool>,
+        pub(super) hdr_burst: RefCell<Option<HdrBurst>>,
     }
 
     #[glib::object_subclass]
@@ -309,6 +337,7 @@ mod imp {
             self.setup_grid();
             self.setup_level();
             self.setup_manual();
+            self.setup_hdr();
             self.setup_location();
             self.obj().load_latest_media();
         }
@@ -389,6 +418,13 @@ mod imp {
             let weak = self.obj().downgrade();
             self.manual_controls_button.connect_toggled(move |button| {
                 if let Some(window) = weak.upgrade() {
+                    button.remove_css_class("pro-on");
+                    if button.is_active() {
+                        button.add_css_class("pro-on");
+                    }
+                    if button.is_active() && window.imp().hdr_enabled.get() {
+                        window.imp().hdr_button.set_active(false);
+                    }
                     window
                         .imp()
                         .manual_revealer
@@ -451,6 +487,33 @@ mod imp {
                         .set_awb_lock(button.is_active());
                 }
             });
+        }
+
+        fn setup_hdr(&self) {
+            let weak = self.obj().downgrade();
+            self.hdr_button.connect_toggled(move |button| {
+                if let Some(window) = weak.upgrade() {
+                    button.remove_css_class("hdr-on");
+                    if button.is_active() {
+                        button.add_css_class("hdr-on");
+                    }
+                    let imp = window.imp();
+                    if button.is_active() {
+                        if imp.manual_controls_button.is_active() {
+                            imp.manual_controls_button.set_active(false);
+                        }
+                        if imp.flash_mode.get() != 0 {
+                            window.set_flash_mode(0);
+                        }
+                        imp.camera_view.get().set_auto_exposure();
+                        imp.manual_active.set(false);
+                        window.update_manual_sensitivity();
+                    }
+                    imp.hdr_enabled.set(button.is_active());
+                    window.update_mode_ui();
+                }
+            });
+            self.hdr_button.set_sensitive(false);
         }
 
         fn setup_location(&self) {
@@ -602,6 +665,18 @@ mod imp {
             });
             window.add_action(&manual);
 
+            let hdr = gio::SimpleAction::new("toggle-hdr", None);
+            let weak = window.downgrade();
+            hdr.connect_activate(move |_, _| {
+                if let Some(window) = weak.upgrade() {
+                    let button = window.imp().hdr_button.get();
+                    if button.is_sensitive() {
+                        button.set_active(!button.is_active());
+                    }
+                }
+            });
+            window.add_action(&hdr);
+
             let thumbnail = gio::SimpleAction::new("thumbnail", None);
             let settings = self.settings.clone();
             let weak = window.downgrade();
@@ -634,6 +709,7 @@ mod imp {
                 application.set_accels_for_action("win.focus-center", &["f"]);
                 application.set_accels_for_action("win.shortcuts", &["<primary>question"]);
                 application.set_accels_for_action("win.settings", &["<primary>comma"]);
+                application.set_accels_for_action("win.toggle-hdr", &["<primary>h"]);
             }
 
             *self.capture_action.borrow_mut() = Some(capture);
@@ -907,6 +983,9 @@ impl CameraWindow {
         }
 
         let enabled = !view.video_mode();
+        if enabled && self.imp().hdr_enabled.get() {
+            self.imp().hdr_button.set_active(false);
+        }
         match view.set_video_mode(enabled) {
             Ok(()) => {
                 self.update_mode_ui();
@@ -926,26 +1005,32 @@ impl CameraWindow {
         let ready = view.ready();
         let video = view.video_mode();
         let recording = view.is_recording();
+        let hdr_busy = imp.hdr_busy.get();
         if !ready {
             self.stop_focus_assist_timeout();
         }
 
         if let Some(action) = imp.capture_action.borrow().as_ref() {
-            action.set_enabled(ready);
+            action.set_enabled(ready && !hdr_busy);
         }
         if let Some(action) = imp.switch_action.borrow().as_ref() {
-            action.set_enabled(ready && !recording);
+            action.set_enabled(ready && !recording && !hdr_busy);
         }
         if let Some(action) = imp.select_action.borrow().as_ref() {
-            action.set_enabled(ready && !recording);
+            action.set_enabled(ready && !recording && !hdr_busy);
         }
         if let Some(action) = imp.video_mode_action.borrow().as_ref() {
-            action.set_enabled(ready && !recording);
+            action.set_enabled(ready && !recording && !hdr_busy);
         }
 
-        imp.camera_menu_button.set_sensitive(ready && !recording);
+        imp.camera_menu_button
+            .set_sensitive(ready && !recording && !hdr_busy);
         imp.flash_menu_button
-            .set_sensitive(ready && !view.is_front());
+            .set_sensitive(ready && !view.is_front() && !hdr_busy && !imp.hdr_enabled.get());
+        imp.hdr_button
+            .set_sensitive(ready && !recording && !video && !hdr_busy);
+        imp.manual_controls_button
+            .set_sensitive(ready && !recording && !hdr_busy);
         self.update_zoom_ui();
         self.update_flash_ui();
         imp.preview_frame.set_ratio(view.preview_aspect());
@@ -1035,11 +1120,18 @@ impl CameraWindow {
         for class in ["flash-off", "flash-on", "flash-torch"] {
             button.remove_css_class(class);
         }
-        button.add_css_class(match mode {
+        let class = match mode {
             1 => "flash-on",
             3 => "flash-torch",
             _ => "flash-off",
-        });
+        };
+        button.add_css_class(class);
+
+        let icon = self.imp().flash_icon.get();
+        for class in ["flash-off", "flash-on", "flash-torch"] {
+            icon.remove_css_class(class);
+        }
+        icon.add_css_class(class);
     }
 
     fn zoom_by(&self, delta: f32) {
@@ -1256,6 +1348,14 @@ impl CameraWindow {
 
     fn capture_photo(&self) {
         self.clear_focus_assist();
+        if self.imp().hdr_busy.get() {
+            return;
+        }
+        if self.imp().hdr_enabled.get() {
+            self.capture_hdr();
+            return;
+        }
+
         let path = match crate::media::next_photo_path() {
             Ok(path) => path,
             Err(error) => {
@@ -1268,6 +1368,134 @@ impl CameraWindow {
             Ok(()) => self.flash_shutter(),
             Err(error) => self.show_toast(&format!("{}: {error}", gettext("Capture failed"))),
         }
+    }
+
+    fn capture_hdr(&self) {
+        let imp = self.imp();
+        let output_path = match next_hdr_path() {
+            Ok(path) => path,
+            Err(error) => {
+                self.show_toast(&format!("{}: {error}", gettext("Could not prepare photo")));
+                return;
+            }
+        };
+
+        let stem = output_path
+            .file_stem()
+            .and_then(|stem| stem.to_str())
+            .unwrap_or("hdr");
+        let temp_dir = std::env::temp_dir();
+        let temp_paths: Vec<PathBuf> = (0..crate::hdr::EV_BRACKETS.len())
+            .map(|index| temp_dir.join(format!("camera_hdr_{stem}_{index}.jpg")))
+            .collect();
+
+        let timeout_output = output_path.clone();
+        let ev0_path = if imp.settings.hdr_save_ev0() {
+            Some(output_path.with_file_name(format!("{stem}_EV0.jpg")))
+        } else {
+            None
+        };
+        *imp.hdr_burst.borrow_mut() = Some(HdrBurst {
+            temp_paths: temp_paths.clone(),
+            output_path,
+            ev0_path,
+            callbacks: 0,
+            failed: false,
+        });
+        imp.hdr_busy.set(true);
+        self.update_mode_ui();
+        self.show_progress_toast(&gettext("Hold still…"), 1);
+
+        // The HAL normally reports all three stills, but a stuck burst must
+        // not leave the shutter disabled forever.
+        let weak = self.downgrade();
+        glib::timeout_add_local_once(Duration::from_secs(5), move || {
+            if let Some(window) = weak.upgrade() {
+                let burst = {
+                    let mut slot = window.imp().hdr_burst.borrow_mut();
+                    if slot
+                        .as_ref()
+                        .is_some_and(|burst| burst.output_path == timeout_output)
+                    {
+                        slot.take()
+                    } else {
+                        None
+                    }
+                };
+                if let Some(burst) = burst {
+                    window.finish_hdr_failure(burst);
+                }
+            }
+        });
+
+        if let Err(error) = imp
+            .camera_view
+            .get()
+            .capture_burst(&temp_paths, &crate::hdr::EV_BRACKETS)
+        {
+            *imp.hdr_burst.borrow_mut() = None;
+            imp.hdr_busy.set(false);
+            for path in &temp_paths {
+                let _ = std::fs::remove_file(path);
+            }
+            self.update_mode_ui();
+            self.show_toast(&format!(
+                "{}: {error}",
+                gettext("Could not start HDR capture")
+            ));
+        }
+    }
+
+    fn start_hdr_processing(&self, burst: HdrBurst) {
+        self.show_progress_toast(&gettext("Processing HDR…"), 0);
+        let temp_paths = burst.temp_paths;
+        let output_path = burst.output_path;
+        let ev0_path = burst.ev0_path;
+        let weak = glib::SendWeakRef::from(self.downgrade());
+        std::thread::spawn(move || {
+            let ev0_saved = ev0_path
+                .as_ref()
+                .is_some_and(|path| std::fs::copy(&temp_paths[1], path).is_ok());
+            let result = crate::hdr::process_brackets(&temp_paths, &output_path);
+            if std::env::var_os("CAMERA_KEEP_HDR_TEMPS").is_none() {
+                for path in &temp_paths {
+                    let _ = std::fs::remove_file(path);
+                }
+            }
+            glib::idle_add_once(move || {
+                if let Some(window) = weak.upgrade() {
+                    window.imp().hdr_busy.set(false);
+                    window.update_mode_ui();
+                    match result {
+                        Ok(()) => {
+                            if ev0_saved {
+                                if let Some(ev0_path) = &ev0_path {
+                                    window.tag_photo_location(ev0_path);
+                                }
+                            }
+                            window.tag_photo_location(&output_path);
+                            window.show_progress_toast(&gettext("HDR photo saved"), 2);
+                        }
+                        Err(error) => {
+                            let _ = std::fs::remove_file(&output_path);
+                            window.show_progress_toast(
+                                &format!("{}: {error}", gettext("HDR processing failed")),
+                                4,
+                            );
+                        }
+                    }
+                }
+            });
+        });
+    }
+
+    fn finish_hdr_failure(&self, burst: HdrBurst) {
+        for path in &burst.temp_paths {
+            let _ = std::fs::remove_file(path);
+        }
+        self.imp().hdr_busy.set(false);
+        self.update_mode_ui();
+        self.show_progress_toast(&gettext("HDR capture failed"), 3);
     }
 
     fn flip_camera(&self) {
@@ -1455,6 +1683,45 @@ impl CameraWindow {
     }
 
     fn on_photo_result(&self, path: &str, ok: bool) {
+        let mut finished = None;
+        let active_burst = {
+            let mut slot = self.imp().hdr_burst.borrow_mut();
+            if let Some(burst) = slot.as_mut() {
+                burst.callbacks = burst.callbacks.saturating_add(1);
+                if !ok {
+                    burst.failed = true;
+                }
+                if burst.callbacks >= crate::hdr::EV_BRACKETS.len() as u8 {
+                    finished = slot.take();
+                }
+                true
+            } else {
+                false
+            }
+        };
+
+        if let Some(burst) = finished {
+            if burst.failed {
+                self.finish_hdr_failure(burst);
+            } else {
+                self.start_hdr_processing(burst);
+            }
+            return;
+        }
+        if active_burst {
+            return;
+        }
+
+        let path_buf = Path::new(path);
+        if path_buf
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| name.starts_with("camera_hdr_"))
+        {
+            let _ = std::fs::remove_file(path_buf);
+            return;
+        }
+
         if ok {
             // Tag first; the thumbnail is refreshed after the EXIF write so it
             // never reads a half-rewritten JPEG.
@@ -1701,6 +1968,16 @@ impl CameraWindow {
 
     pub(crate) fn show_toast(&self, message: &str) {
         self.imp().toast_overlay.add_toast(adw::Toast::new(message));
+    }
+
+    /// Replace the current toast instead of queueing behind it.  Used for the
+    /// short HDR progress messages, which would otherwise lag behind the work.
+    fn show_progress_toast(&self, message: &str, timeout: u32) {
+        let overlay = self.imp().toast_overlay.get();
+        overlay.dismiss_all();
+        let toast = adw::Toast::new(message);
+        toast.set_timeout(timeout);
+        overlay.add_toast(toast);
     }
 
     fn show_short_toast(&self, message: &str) {

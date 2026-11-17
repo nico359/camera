@@ -18,10 +18,22 @@
   box-shadow: none;
 }
 
-.pro-label {
+.pro-label,
+.hdr-label {
   font-weight: 700;
   padding: 0 4px;
 }
+
+.camera-header .pro-label,
+.camera-header .hdr-label {
+  color: #9a9996;
+}
+
+.camera-header .pro-on .pro-label,
+.camera-header .hdr-on .hdr-label {
+  color: #ffffff;
+}
+
 
 .ev-control {
   background-color: rgba(0, 0, 0, 0.42);
@@ -54,16 +66,22 @@
   background-color: rgba(246, 211, 45, 0.12);
 }
 
-.camera-header .flash-off {
+.camera-header .flash-off,
+.camera-header image.flash-off {
   color: #9a9996;
+  opacity: 0.65;
 }
 
-.camera-header .flash-on {
+.camera-header .flash-on,
+.camera-header image.flash-on {
   color: #ffffff;
+  opacity: 1.0;
 }
 
-.camera-header .flash-torch {
+.camera-header .flash-torch,
+.camera-header image.flash-torch {
   color: #f6d32d;
+  opacity: 1.0;
 }
 
 .gallery-viewer {

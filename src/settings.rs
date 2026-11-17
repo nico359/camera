@@ -88,6 +88,10 @@ impl AppSettings {
         self.settings.boolean("thumbnail-opens-external")
     }
 
+    pub fn hdr_save_ev0(&self) -> bool {
+        self.settings.boolean("hdr-save-ev0")
+    }
+
     pub fn geotag_photos(&self) -> bool {
         self.settings.boolean("geotag-photos")
     }

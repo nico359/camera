@@ -27,6 +27,11 @@
 			<summary>Photo resolution per camera</summary>
 			<description>Maps camera IDs to a requested JPEG size in WIDTHxHEIGHT form. Missing entries use the camera's full resolution.</description>
 		</key>
+		<key name="hdr-save-ev0" type="b">
+			<default>false</default>
+			<summary>Keep HDR EV0 frame</summary>
+			<description>Also save the neutral exposure from an HDR burst alongside the fused image.</description>
+		</key>
 		<key name="show-grid" type="b">
 			<default>false</default>
 			<summary>Show 3x3 grid</summary>

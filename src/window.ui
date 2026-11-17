@@ -15,6 +15,7 @@
               <object class="AdwToolbarView">
                 <child type="top">
                   <object class="AdwHeaderBar">
+                    <property name="show-title">False</property>
                     <style>
                       <class name="camera-header"/>
                     </style>
@@ -29,21 +30,34 @@
                         </child>
                         <child>
                           <object class="GtkMenuButton" id="flash_menu_button">
-                            <property name="icon-name">camera-flash-symbolic</property>
                             <property name="tooltip-text" translatable="yes">Flash Mode</property>
                             <property name="sensitive">False</property>
+                            <child>
+                              <object class="GtkImage" id="flash_icon">
+                                <property name="icon-name">camera-flash-symbolic</property>
+                                <property name="pixel-size">20</property>
+                              </object>
+                            </child>
                           </object>
                         </child>
                         <child>
-                          <object class="GtkImage" id="gps_indicator">
-                            <property name="icon-name">find-location-symbolic</property>
-                            <property name="pixel-size">16</property>
-                            <property name="visible">False</property>
+                          <object class="GtkBox">
+                            <property name="width-request">40</property>
+                            <property name="margin-start">8</property>
+                            <property name="halign">center</property>
                             <property name="valign">center</property>
-                            <property name="tooltip-text" translatable="yes">No GPS fix</property>
-                            <style>
-                              <class name="dim-label"/>
-                            </style>
+                            <child>
+                              <object class="GtkImage" id="gps_indicator">
+                                <property name="icon-name">find-location-symbolic</property>
+                                <property name="pixel-size">18</property>
+                                <property name="visible">False</property>
+                                <property name="valign">center</property>
+                                <property name="tooltip-text" translatable="yes">No GPS fix</property>
+                                <style>
+                                  <class name="dim-label"/>
+                                </style>
+                              </object>
+                            </child>
                           </object>
                         </child>
                       </object>
@@ -57,18 +71,45 @@
                       </object>
                     </child>
                     <child type="end">
-                      <object class="GtkToggleButton" id="manual_controls_button">
-                        <property name="tooltip-text" translatable="yes">Manual Controls</property>
+                      <object class="GtkBox">
+                        <property name="spacing">0</property>
                         <property name="valign">center</property>
-                        <style>
-                          <class name="flat"/>
-                        </style>
+                        <property name="hexpand">False</property>
+                        <property name="halign">end</property>
                         <child>
-                          <object class="GtkLabel">
-                            <property name="label" translatable="yes">Pro</property>
+                          <object class="GtkToggleButton" id="hdr_button">
+                            <property name="tooltip-text" translatable="yes">HDR (exposure bracketing)</property>
+                            <property name="valign">center</property>
+                            <property name="hexpand">False</property>
                             <style>
-                              <class name="pro-label"/>
+                              <class name="flat"/>
                             </style>
+                            <child>
+                              <object class="GtkLabel">
+                                <property name="label" translatable="yes">HDR</property>
+                                <style>
+                                  <class name="hdr-label"/>
+                                </style>
+                              </object>
+                            </child>
+                          </object>
+                        </child>
+                        <child>
+                          <object class="GtkToggleButton" id="manual_controls_button">
+                            <property name="tooltip-text" translatable="yes">Manual Controls</property>
+                            <property name="valign">center</property>
+                            <property name="hexpand">False</property>
+                            <style>
+                              <class name="flat"/>
+                            </style>
+                            <child>
+                              <object class="GtkLabel">
+                                <property name="label" translatable="yes">PRO</property>
+                                <style>
+                                  <class name="pro-label"/>
+                                </style>
+                              </object>
+                            </child>
                           </object>
                         </child>
                       </object>

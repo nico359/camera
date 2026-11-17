@@ -53,6 +53,16 @@
                 </child>
                 <child>
                   <object class="AdwActionRow">
+                    <property name="title" translatable="yes">Toggle HDR</property>
+                    <child type="suffix">
+                      <object class="GtkShortcutLabel">
+                        <property name="accelerator">&lt;Primary&gt;h</property>
+                      </object>
+                    </child>
+                  </object>
+                </child>
+                <child>
+                  <object class="AdwActionRow">
                     <property name="title" translatable="yes">Reset Focus</property>
                     <child type="suffix">
                       <object class="GtkShortcutLabel">

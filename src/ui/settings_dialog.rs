@@ -175,6 +175,16 @@ pub fn present(window: &CameraWindow) {
     });
     photo_group.add(&quality);
 
+    let hdr_save_ev0 = adw::SwitchRow::new();
+    hdr_save_ev0.set_title(&gettext("Keep HDR EV0 Frame"));
+    hdr_save_ev0.set_subtitle(&gettext("Also save the unmerged neutral exposure"));
+    hdr_save_ev0.set_active(settings.hdr_save_ev0());
+    settings
+        .gio()
+        .bind("hdr-save-ev0", &hdr_save_ev0, "active")
+        .build();
+    photo_group.add(&hdr_save_ev0);
+
     page.add(&photo_group);
 
     let composition_group = adw::PreferencesGroup::new();
