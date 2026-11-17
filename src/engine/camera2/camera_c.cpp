@@ -308,6 +308,27 @@ int fc2_capture_photo(fc2_camera* c, const char* path)
     return (c && path && c->session.capturePhoto(path)) ? 1 : 0;
 }
 
+int fc2_capture_burst(fc2_camera* c, const char* const* paths, int count,
+                      const int* ev_brackets)
+{
+    if (!c || !paths || count <= 0)
+        return 0;
+
+    std::vector<std::string> destinations;
+    destinations.reserve((size_t)count);
+    for (int i = 0; i < count; ++i) {
+        if (!paths[i])
+            return 0;
+        destinations.emplace_back(paths[i]);
+    }
+
+    std::vector<int> evs;
+    if (ev_brackets)
+        evs.assign(ev_brackets, ev_brackets + count);
+
+    return c->session.captureBurst(destinations, 0, evs) ? 1 : 0;
+}
+
 void fc2_set_photo_callback(fc2_camera* c, fc2_photo_callback cb, void* user)
 {
     if (!c)

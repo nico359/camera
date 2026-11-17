@@ -6,7 +6,7 @@
 
 use std::ffi::{c_char, c_float, c_int, c_longlong, c_void, CStr, CString};
 use std::os::unix::ffi::OsStrExt;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::ptr;
 
 use super::{CameraBackend, CameraError, CameraInfo, Facing, PhotoSink};
@@ -81,6 +81,12 @@ extern "C" {
         user_data: *mut c_void,
     );
     fn fc2_capture_photo(camera: *mut fc2_camera, path: *const c_char) -> c_int;
+    fn fc2_capture_burst(
+        camera: *mut fc2_camera,
+        paths: *const *const c_char,
+        count: c_int,
+        ev_brackets: *const c_int,
+    ) -> c_int;
     fn fc2_start_recording(
         camera: *mut fc2_camera,
         path: *const c_char,
@@ -370,6 +376,43 @@ impl CameraBackend for Camera2Backend {
         let path =
             CString::new(path.as_os_str().as_bytes()).map_err(|_| CameraError::InvalidPath)?;
         if unsafe { fc2_capture_photo(self.raw, path.as_ptr()) } != 0 {
+            Ok(())
+        } else {
+            Err(CameraError::CaptureFailed)
+        }
+    }
+
+    fn capture_burst(&mut self, paths: &[PathBuf], ev_brackets: &[i32]) -> Result<(), CameraError> {
+        if self.raw.is_null() {
+            return Err(CameraError::NotOpen);
+        }
+        if paths.is_empty() || (!ev_brackets.is_empty() && ev_brackets.len() != paths.len()) {
+            return Err(CameraError::CaptureFailed);
+        }
+
+        let paths = paths
+            .iter()
+            .map(|path| {
+                CString::new(path.as_os_str().as_bytes()).map_err(|_| CameraError::InvalidPath)
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let pointers: Vec<*const c_char> = paths.iter().map(|path| path.as_ptr()).collect();
+        let evs: Vec<c_int> = ev_brackets.iter().map(|step| *step as c_int).collect();
+        let ev_pointer = if evs.is_empty() {
+            ptr::null()
+        } else {
+            evs.as_ptr()
+        };
+
+        if unsafe {
+            fc2_capture_burst(
+                self.raw,
+                pointers.as_ptr(),
+                pointers.len() as c_int,
+                ev_pointer,
+            )
+        } != 0
+        {
             Ok(())
         } else {
             Err(CameraError::CaptureFailed)

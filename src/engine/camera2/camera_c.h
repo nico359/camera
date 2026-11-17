@@ -128,6 +128,18 @@ void fc2_clear_focus_assist(fc2_camera* c);
 /* Capture / record.  Capture and recording finish asynchronously. */
 int  fc2_capture_photo(fc2_camera* c, const char* path);
 
+/* Capture a burst of stills in one HAL call.  `paths` and `count` describe the
+ * JPEG destinations; `ev_brackets` (or NULL) supplies one EV step per frame
+ * for HDR bracketing.  Frames arrive through the photo callback in order. */
+int  fc2_capture_burst(fc2_camera* c, const char* const* paths, int count,
+                       const int* ev_brackets);
+
+/* Fuse EV-bracketed JPEGs into `output` with OpenCV exposure fusion.  The
+ * frames are downscaled so their long edge is about `working_long_edge` before
+ * alignment; the result is written at the captured resolution. */
+int  fc2_hdr_fuse(const char* const* paths, int count, const char* output,
+                  int working_long_edge);
+
 /* Simultaneous preview + record mode.  Enter it before recording so the
  * viewfinder keeps running; exit it to release the encoder and return to a
  * preview-only session.  Returns 1 on success. */

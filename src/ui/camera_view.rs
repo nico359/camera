@@ -7,7 +7,7 @@
 // chrome only.
 
 use std::cell::{Cell, RefCell};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use gettextrs::gettext;
@@ -788,6 +788,12 @@ impl CameraView {
         let mut session = self.imp().session.borrow_mut();
         session.set_device_rotation(self.device_rotation());
         session.capture_photo(path)
+    }
+
+    pub fn capture_burst(&self, paths: &[PathBuf], ev_brackets: &[i32]) -> Result<(), CameraError> {
+        let mut session = self.imp().session.borrow_mut();
+        session.set_device_rotation(self.device_rotation());
+        session.capture_burst(paths, ev_brackets)
     }
 }
 

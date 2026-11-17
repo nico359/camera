@@ -10,7 +10,7 @@
 mod camera2;
 
 use std::fmt;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -110,6 +110,7 @@ pub trait CameraBackend {
         crop_y: f32,
     ) -> bool;
     fn capture_photo(&mut self, path: &Path) -> Result<(), CameraError>;
+    fn capture_burst(&mut self, paths: &[PathBuf], ev_brackets: &[i32]) -> Result<(), CameraError>;
     fn enter_video_mode(
         &mut self,
         width: i32,
@@ -362,6 +363,17 @@ impl CameraSession {
             .as_mut()
             .ok_or(CameraError::NotOpen)?
             .capture_photo(path)
+    }
+
+    pub fn capture_burst(
+        &mut self,
+        paths: &[PathBuf],
+        ev_brackets: &[i32],
+    ) -> Result<(), CameraError> {
+        self.backend
+            .as_mut()
+            .ok_or(CameraError::NotOpen)?
+            .capture_burst(paths, ev_brackets)
     }
 
     pub fn enter_video_mode(
