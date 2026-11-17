@@ -22,6 +22,7 @@ mod application;
 mod camera;
 mod config;
 mod device_rotation;
+mod hdr;
 mod level_sensor;
 mod location;
 mod media;

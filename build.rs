@@ -58,7 +58,41 @@ fn main() {
         .file(format!("{engine}/AudioEncoder.cpp"))
         .file(format!("{engine}/PreviewRenderer.cpp"))
         .file(format!("{engine}/camera_c.cpp"))
-        .file(format!("{engine}/hybris_loader.cpp"));
+        .file(format!("{engine}/hybris_loader.cpp"))
+        .file(format!("{engine}/hdr_fuse.cpp"));
+
+    // OpenCV provides the proven alignment/exposure-fusion implementation for
+    // the HDR burst.  Prefer pkg-config (the Flatpak module installs it) and
+    // fall back to the usual Debian include path for local phone builds.
+    let mut opencv_libs = Vec::new();
+    match pkg_config::Config::new()
+        .cargo_metadata(false)
+        .probe("opencv4")
+    {
+        Ok(opencv) => {
+            build.includes(opencv.include_paths);
+            opencv_libs.extend(opencv.libs);
+        }
+        Err(_) => {
+            let include = std::env::var("OPENCV_INCLUDE_DIR")
+                .unwrap_or_else(|_| "/usr/include/opencv4".to_string());
+            if let Ok(lib_dir) = std::env::var("OPENCV_LIB_DIR") {
+                println!("cargo:rustc-link-search=native={lib_dir}");
+            }
+            build.include(include);
+            opencv_libs.extend(
+                [
+                    "opencv_photo",
+                    "opencv_imgcodecs",
+                    "opencv_imgproc",
+                    "opencv_core",
+                ]
+                .iter()
+                .map(|lib| lib.to_string()),
+            );
+            println!("cargo:warning=OpenCV pkg-config not found; using the system OpenCV headers");
+        }
+    }
 
     // Enable AAC audio recording when the GStreamer development files are
     // available.  The Flatpak SDK ships them; desktop builds without them fall
@@ -85,6 +119,12 @@ fn main() {
     audio_libs.sort();
     audio_libs.dedup();
     for lib in audio_libs {
+        println!("cargo:rustc-link-lib=dylib={lib}");
+    }
+
+    opencv_libs.sort();
+    opencv_libs.dedup();
+    for lib in opencv_libs {
         println!("cargo:rustc-link-lib=dylib={lib}");
     }
 

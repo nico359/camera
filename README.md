@@ -50,6 +50,11 @@ Flatpak. Feature parity with FuriCam or at least close to it is planned. Might a
   location only when the fix is fresh and (by default) accurate to 10 m, and
   never reuses a stale fix. A header indicator shows the current fix; videos
   are not tagged yet
+- opt-in HDR beside Pro: captures a three-frame EV (-3/0/+3) burst and fuses
+  it with OpenCV Mertens exposure fusion. The merge works at a ~1700 px long
+  edge and writes at the selected photo resolution, so 12 MP and 20 MP shots
+  keep their configured size. An optional Settings switch also keeps the
+  unmerged EV0 frame alongside the fused result
 - a translucent, rounded Pro panel with logarithmic ISO and shutter sliders,
   an Auto mode toggle and AE/AWB locks; ranges come from the active camera and
   reset on camera/mode changes. For tall aspects such as 4:3 the preview moves
@@ -153,6 +158,9 @@ FuriOS, so `--system` is the default here.
 
 Requirements:
 
+- OpenCV `core`, `imgproc`, `photo` and `imgcodecs` are built as part of the
+  Flatpak for HDR. Local `-Dcamera2=true` builds need the OpenCV development
+  files.
 - `org.gnome.Sdk//51` and the matching Rust extension.  The SDK metadata
   declares `org.freedesktop.Sdk.Extension` version `26.08`, so install
   `org.freedesktop.Sdk.Extension.rust-stable//26.08`.
