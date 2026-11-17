@@ -13,6 +13,7 @@
     <p>Version 0.4.0 adds a manual-exposure Pro panel, a keyboard-shortcuts sheet, a compact gallery pager, video scrubbing controls, reliable double-tap zoom and uninterrupted panning in the gallery viewer.</p>
     <p>Version 0.5.0 adds gallery swipe gestures, a file-info sheet and deletion with confirmation.</p>
     <p>Version 0.5.1 fixes startup on devices without the Camera2/Halium backend and keeps the gallery Back button available after deleting the last item.</p>
+    <p>Version 0.6.0 adds opt-in HDR capture: three EV brackets are aligned and fused with OpenCV Mertens exposure fusion, with an optional unmerged EV0 frame and output at the selected photo resolution. It also fixes still orientation, removes the centered window title and gives the header toggles clear active states.</p>
     <p>Photos and videos are saved to the standard Pictures/Camera and Videos/Camera folders. The last-media thumbnail can instead open the latest item in the system viewer.</p>
   </description>
 
@@ -58,11 +59,11 @@
   <screenshots>
     <screenshot type="default">
       <caption>Photo mode</caption>
-      <image>https://raw.githubusercontent.com/nico359/camera/v0.5.1/data/screenshot-photo.png</image>
+      <image>https://raw.githubusercontent.com/nico359/camera/v0.6.0/data/screenshot-photo.png</image>
     </screenshot>
     <screenshot>
       <caption>Video mode</caption>
-      <image>https://raw.githubusercontent.com/nico359/camera/v0.5.1/data/screenshot-video.png</image>
+      <image>https://raw.githubusercontent.com/nico359/camera/v0.6.0/data/screenshot-video.png</image>
     </screenshot>
   </screenshots>
 
@@ -74,6 +75,18 @@
   <content_rating type="oars-1.1" />
 
   <releases>
+    <release version="0.6.0" date="2026-11-17" type="stable">
+      <description translate="no">
+        <p>HDR and header polish release.</p>
+        <ul>
+          <li>Opt-in HDR with a -3/0/+3 EV burst, OpenCV AlignMTB alignment and Mertens exposure fusion</li>
+          <li>HDR output follows the selected 12 MP or 20 MP photo size, with an optional unmerged EV0 frame</li>
+          <li>HDR, PRO and flash header controls show clear active states; flash also shows its torch state</li>
+          <li>Title-free camera header with evenly spaced camera, flash and location controls</li>
+          <li>Fixed still orientation by querying the current sensor orientation</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.5.1" date="2026-11-13" type="stable">
       <description translate="no">
         <p>Bug-fix release.</p>

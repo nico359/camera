@@ -4,11 +4,11 @@ A GTK4/libadwaita camera application for FuriOS and other Halium-based Linux
 phones (maybe, the only other phone I can test is the Pixel 3a running Droidian and it doesn't work there).
 
 Camera drives the [FuriCam](https://github.com/nico359/furicam) Camera2 engine
-from a native GTK4 frontend. The 0.5.0 milestone covers the camera and media
+from a native GTK4 frontend. The 0.6.0 milestone covers the camera and media
 workflow: a real Camera2 viewfinder, full-resolution stills, hardware-encoded
-video, manual exposure, settings, a rotating level, an in-app media gallery
-with a video player, swipe gestures and deletion, and GPS tagging inside a
-Flatpak. Feature parity with FuriCam or at least close to it is planned. Might abandon FuriCam for this at some point because furios-camera will keep developing as well but let's see.
+video, HDR exposure fusion, manual exposure, settings, a rotating level, an
+in-app media gallery with a video player, swipe gestures and deletion, and GPS
+tagging inside a Flatpak. Feature parity with FuriCam or at least close to it is planned. Might abandon FuriCam for this at some point because furios-camera will keep developing as well but let's see.
 
 <p>
   <img src="data/screenshot-photo.png" width="240" alt="Photo mode">
@@ -102,11 +102,13 @@ Flatpak. Feature parity with FuriCam or at least close to it is planned. Might a
 Not implemented yet:
 
 - gallery sharing, event-level double-tap zoom and persistent photo
-  thumbnails; video GPS tags, manual focus, HDR and RAW. The engine already
-  exposes most of these through its C API; the UI is the remaining work.
+  thumbnails; video GPS tags, manual focus and RAW. The engine already exposes
+  most of these through its C API; the UI is the remaining work.
 
 Known limitations:
 
+- HDR fuses at an internal long edge of about 1700 px and works best on static
+  scenes; moving subjects can ghost because there is no deghosting pass yet.
 - Flash **On** uses the engine's still-flash path but does not run FuriCam's
   full preflash/AF-assist capture sequence yet.
 - Video frame rate can drop in low light because the engine's AE range is
