@@ -9,9 +9,11 @@
 use gtk::gio;
 use gtk::gio::prelude::*;
 use gtk::glib;
+use gtk::glib::variant::ToVariant;
 
 pub struct DeviceRotation {
     proxy: Option<gio::DBusProxy>,
+    connection: Option<gio::DBusConnection>,
 }
 
 impl DeviceRotation {
@@ -37,27 +39,55 @@ impl DeviceRotation {
             );
         }
 
-        Self { proxy }
+        let connection = gio::bus_get_sync(gio::BusType::System, None::<&gio::Cancellable>).ok();
+
+        Self { proxy, connection }
     }
 
+    /// Current device tilt.  FuriCam queries the properties interface fresh
+    /// before every capture because the proxy's cached property can lag behind
+    /// the sensor; do the same here so a rotated phone never gets a stale JPEG
+    /// orientation.
     pub fn degrees(&self) -> i32 {
-        self.proxy.as_ref().map(Self::degrees_from).unwrap_or(0)
-    }
-
-    pub fn degrees_from(proxy: &gio::DBusProxy) -> i32 {
-        let Some(value) = proxy.cached_property("AccelerometerOrientation") else {
-            return 0;
-        };
-        let Some(orientation) = value.str() else {
-            return 0;
-        };
-
-        match orientation {
-            "left-up" => 90,
-            "bottom-up" => 180,
-            "right-up" => 270,
-            _ => 0,
+        if let Some(connection) = &self.connection {
+            if let Some(orientation) = fresh_orientation(connection) {
+                return parse_orientation(&orientation);
+            }
         }
+
+        self.proxy
+            .as_ref()
+            .and_then(|proxy| proxy.cached_property("AccelerometerOrientation"))
+            .and_then(|value| value.str().map(parse_orientation))
+            .unwrap_or(0)
+    }
+}
+
+fn fresh_orientation(connection: &gio::DBusConnection) -> Option<String> {
+    let parameters = ("net.hadess.SensorProxy", "AccelerometerOrientation").to_variant();
+    let reply = connection
+        .call_sync(
+            Some("net.hadess.SensorProxy"),
+            "/net/hadess/SensorProxy",
+            "org.freedesktop.DBus.Properties",
+            "Get",
+            Some(&parameters),
+            None,
+            gio::DBusCallFlags::NONE,
+            -1,
+            None::<&gio::Cancellable>,
+        )
+        .ok()?;
+    let value = reply.get::<(glib::Variant,)>()?.0;
+    value.str().map(|orientation| orientation.to_string())
+}
+
+fn parse_orientation(orientation: &str) -> i32 {
+    match orientation {
+        "left-up" => 90,
+        "bottom-up" => 180,
+        "right-up" => 270,
+        _ => 0,
     }
 }
 
